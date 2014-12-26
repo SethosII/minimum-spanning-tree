@@ -487,45 +487,6 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 		printList(lists[i]);
 		printf("\n");
 	}
-//	int* adjacencyMatrix = (int*) malloc(
-//			graph->vertices * graph->vertices * sizeof(int));
-//	memset(adjacencyMatrix, NO_EDGE,
-//			graph->vertices * graph->vertices * sizeof(int));
-//	for (int i = 0; i < graph->edges; i++) {
-//		adjacencyMatrix[graph->edgeList[i * EDGE_MEMBERS] * graph->vertices
-//				+ graph->edgeList[i * EDGE_MEMBERS + 1]] = graph->edgeList[i
-//				* EDGE_MEMBERS + 2];
-//		adjacencyMatrix[graph->edgeList[i * EDGE_MEMBERS + 1] * graph->vertices
-//				+ graph->edgeList[i * EDGE_MEMBERS]] = graph->edgeList[i
-//				* EDGE_MEMBERS + 2];
-//	}
-//
-//	int mstVertices[graph->vertices];
-//	int mstVerticesN = 0;
-//	mstVertices[mstVerticesN] = graph->edgeList[0];
-//	mstVerticesN++;
-//
-//	int currentEdge = INT_MAX;
-//	int currentEdgeWeight = INT_MAX;
-//	for (int i = 0; i < mstVerticesN; i++) {
-//		for (int j = 0; j < graph->vertices; j++) {
-//			if (adjacencyMatrix[i * graph->vertices + j] != -1
-//					&& adjacencyMatrix[i * graph->vertices + j]
-//							< currentEdgeWeight) {
-//				currentEdge = j;
-//				currentEdgeWeight = adjacencyMatrix[i * graph->vertices + j];
-//			}
-//		}
-//	}
-//
-//	for (int i = 0; i < graph->vertices; i++) {
-//		for (int j = 0; j < graph->vertices; j++) {
-//			printf("%5.d", adjacencyMatrix[i * graph->vertices + j]);
-//		}
-//		printf("\n");
-//	}
-//
-//	free(adjacencyMatrix);
 }
 
 /*
@@ -706,7 +667,8 @@ void readMazeFile(WeightedGraph* graph, const char inputFileName[]) {
 	fscanfResult = fscanf(inputFile, "%d %d", &vertices, &edges);
 	newWeightedGraph(graph, vertices, edges);
 
-	// all lines after the first contain the edges, values stored as "from to weight"
+	// all lines after the first contain the edges
+	// values stored as "from to weight"
 	int from;
 	int to;
 	int weight;
@@ -736,84 +698,64 @@ void sort(WeightedGraph* graph) {
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Status status;
 
-	if (0 && size == 1 && rank == 0) {
-		mergeSort(graph->edgeList, 0, graph->edges - 1);
+	// send number of elements
+	int elements;
+	if (rank == 0) {
+		elements = graph->edges;
+		MPI_Bcast(&elements, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	} else {
-		// send number of elements
-		int elements;
-		if (rank == 0) {
-			elements = graph->edges;
-			MPI_Bcast(&elements, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		} else {
-			MPI_Bcast(&elements, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		}
-		int elements2;
-		if (rank == size - 1) {
-			// TODO elements for last process
-			elements2 = elements % ((elements + size - 1) / size);
-			printf("end: %d %d\n", elements, elements2);
-			elements = (elements + size - 1) / size;
-			printf("end: %d %d\n", elements, elements2);
-		} else {
-			elements = (elements + size - 1) / size;
-		}
-		int* edgeListPart = (int*) malloc(
-				elements * EDGE_MEMBERS * sizeof(int));
+		MPI_Bcast(&elements, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	}
 
-		// scatter the edges to sort
-		MPI_Scatter(graph->edgeList, elements * EDGE_MEMBERS, MPI_INT,
-				edgeListPart, elements * EDGE_MEMBERS,
-				MPI_INT, 0, MPI_COMM_WORLD);
+	// scatter the edges to sort
+	int elementsPart = (elements + size - 1) / size;
+	int* edgeListPart = (int*) malloc(elementsPart * EDGE_MEMBERS * sizeof(int));
+	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT, edgeListPart,
+			elementsPart * EDGE_MEMBERS,
+			MPI_INT, 0, MPI_COMM_WORLD);
 
-		char buffer[1000];
-		int buffersize = 0;
-		buffersize += sprintf(buffer, "%d: %d\n", rank, elements);
-		for (int i = 0; i < elements; i++) {
-			for (int j = 0; j < EDGE_MEMBERS; j++) {
-				buffersize += sprintf(buffer, "%s %d ", buffer,
-						edgeListPart[i * EDGE_MEMBERS + j]);
+	if (rank == size - 1 && elements % elementsPart != 0) {
+		// number of elements and processes isn't divisible without remainder
+		elementsPart = elements % elementsPart;
+	}
+
+	// sort the part
+	mergeSort(edgeListPart, 0, elementsPart - 1);
+
+	// merge all parts
+	int from;
+	int to;
+	int elementsRecieved;
+	for (int step = 1; step < size; step *= 2) {
+		if (rank % (2 * step) == 0) {
+			from = rank + step;
+			if (from < size) {
+				MPI_Recv(&elementsRecieved, 1, MPI_INT, from, 0,
+				MPI_COMM_WORLD, &status);
+				edgeListPart = realloc(edgeListPart,
+						(elementsPart + elementsRecieved) * EDGE_MEMBERS
+								* sizeof(int));
+				MPI_Recv(&edgeListPart[elementsPart * EDGE_MEMBERS],
+						elementsRecieved * EDGE_MEMBERS,
+						MPI_INT, from, 0, MPI_COMM_WORLD, &status);
+				merge(edgeListPart, 0, elementsPart + elementsRecieved - 1,
+						elementsPart - 1);
+				elementsPart += elementsRecieved;
 			}
-			buffersize += sprintf(buffer, "%s\n", buffer);
+		} else if (rank % (step) == 0) {
+			to = rank - step;
+			MPI_Send(&elementsPart, 1, MPI_INT, to, 0, MPI_COMM_WORLD);
+			MPI_Send(edgeListPart, elementsPart * EDGE_MEMBERS, MPI_INT, to, 0,
+			MPI_COMM_WORLD);
 		}
-		printf("%s", buffer);
+	}
 
-		mergeSort(edgeListPart, 0, elements - 1);
-
-		// merge all parts
-		int from;
-		int to;
-		int elementsRecieved;
-		for (int step = 1; step < size; step *= 2) {
-			if (rank % (2 * step) == 0) {
-				from = rank + step;
-				if (from < size) {
-					MPI_Recv(&elementsRecieved, 1, MPI_INT, from, 0,
-					MPI_COMM_WORLD, &status);
-					edgeListPart = realloc(edgeListPart,
-							(elements + elementsRecieved) * EDGE_MEMBERS
-									* sizeof(int));
-					MPI_Recv(&edgeListPart[elements * EDGE_MEMBERS],
-							elementsRecieved * EDGE_MEMBERS,
-							MPI_INT, from, 0, MPI_COMM_WORLD, &status);
-					merge(edgeListPart, 0, elements + elementsRecieved - 1,
-							elements - 1);
-					elements += elementsRecieved;
-				}
-			} else if (rank % (step) == 0) {
-				to = rank - step;
-				MPI_Send(&elements, 1, MPI_INT, to, 0, MPI_COMM_WORLD);
-				MPI_Send(edgeListPart, elements * EDGE_MEMBERS, MPI_INT, to, 0,
-				MPI_COMM_WORLD);
-			}
-		}
-
-		// edgeListPart is the new edgeList of the graph, cleanup other memory
-		if (rank == 0) {
-			free(graph->edgeList);
-			graph->edgeList = edgeListPart;
-		} else {
-			free(edgeListPart);
-		}
+	// edgeListPart is the new edgeList of the graph, cleanup other memory
+	if (rank == 0) {
+		free(graph->edgeList);
+		graph->edgeList = edgeListPart;
+	} else {
+		free(edgeListPart);
 	}
 }
 
