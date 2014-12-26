@@ -88,7 +88,7 @@ void insertNode(LinkedList* list, int data) {
 }
 
 /*
- * print athe data of a linked list
+ * print the data of a linked list
  */
 void printList(LinkedList* list) {
 	printf("%d ", list->value);
@@ -102,18 +102,16 @@ void printList(LinkedList* list) {
  */
 int main(int argc, char* argv[]) {
 	// MPI variables and initialization
-	int size, rank, namelen;
-	char processor_name[MPI_MAX_PROCESSOR_NAME];
+	int size;
+	int rank;
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Get_processor_name(processor_name, &namelen);
 	MPI_Datatype MPI_HANDLE;
 	MPI_Type_contiguous(sizeof(Handle) / sizeof(int), MPI_INT, &MPI_HANDLE);
 	MPI_Type_commit(&MPI_HANDLE);
-//	printf("Hello world from process %d on %s of %d\n", rank, processor_name, size);
 
-// control variable
+	// control variable
 	Handle handle;
 
 	// graph Variables
@@ -157,7 +155,6 @@ int main(int argc, char* argv[]) {
 	}
 
 	double start = MPI_Wtime();
-	// printf("%d %d\n", rank, handle.algorithm);
 	if (handle.algorithm == 0) {
 		// use Kruskal's algorithm
 		mstKruskal(graph, mst, set);
@@ -382,7 +379,7 @@ void merge(int* edgeList, int start, int size, int pivot) {
  */
 void mergeSort(int* edgeList, int start, int size) {
 	if (start == size) {
-// already sorted
+		// already sorted
 		return;
 	}
 
@@ -418,7 +415,7 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
 	if (rank == 0) {
 		printf("Time for sorting: %f s\n", MPI_Wtime() - start);
 
-// add edges to the MST
+		// add edges to the MST
 		int currentEdge = 0;
 		int edgesMST = 0;
 		while (edgesMST < graph->vertices - 1 || currentEdge < graph->edges) {
@@ -709,9 +706,10 @@ void sort(WeightedGraph* graph) {
 
 	// scatter the edges to sort
 	int elementsPart = (elements + size - 1) / size;
-	int* edgeListPart = (int*) malloc(elementsPart * EDGE_MEMBERS * sizeof(int));
-	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT, edgeListPart,
-			elementsPart * EDGE_MEMBERS,
+	int* edgeListPart = (int*) malloc(
+			elementsPart * EDGE_MEMBERS * sizeof(int));
+	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT,
+			edgeListPart, elementsPart * EDGE_MEMBERS,
 			MPI_INT, 0, MPI_COMM_WORLD);
 
 	if (rank == size - 1 && elements % elementsPart != 0) {
