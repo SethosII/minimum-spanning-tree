@@ -34,3 +34,4 @@ Release/MST
 *.csv
 testrun.sh
 auswertung/
+.metadata/
