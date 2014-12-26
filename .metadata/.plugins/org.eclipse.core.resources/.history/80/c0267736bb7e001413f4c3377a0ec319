@@ -1,0 +1,436 @@
+/*
+ * main.c
+ *
+ *  Created on: 03.12.2014
+ *      Author: pjaehne
+ */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <mpi.h>
+
+const int edgeMembers = 3;
+
+typedef struct {
+	int edges;
+	int vertices;
+	int* edgeList;
+	int* cannonicalElements;
+} WeightedGraph;
+
+typedef struct {
+	int rows;
+	int columns;
+	int parallel;
+	int algorithm;
+} Handle;
+
+void createMazeFile(const int rows, const int columns,
+		const char outputFileName[]);
+int createsLoop(const WeightedGraph* graph, int currentedge);
+void mergeSort(int* edgeList, int start2, int size2);
+WeightedGraph mstKruskal(const WeightedGraph* graph);
+WeightedGraph newWeightedGraph(const int vertices, const int edges,
+		int edgeList[edges][edgeMembers], int cannonicalElements[vertices]);
+void printMaze(const WeightedGraph* graph, int rows, int columns);
+void printWeightedGraph(const WeightedGraph* graph);
+Handle processParameters(int argc, char* argv[]);
+WeightedGraph readMazeFile(const char inputFileName[]);
+void sort(const WeightedGraph* graph);
+
+int main(int argc, char* argv[]) {
+	int size, rank, namelen;
+	char processor_name[MPI_MAX_PROCESSOR_NAME];
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Get_processor_name(processor_name, &namelen);
+//	printf("Hello world from process %d on %s of %d\n", rank, processor_name, size);
+
+	if (rank == 0) {
+		printf("Starting\n");
+
+		Handle handle = processParameters(argc, argv);
+
+		createMazeFile(handle.rows, handle.columns, "maze.csv");
+
+		WeightedGraph graph = readMazeFile("maze.csv");
+
+		printf("Graph:\n");
+		printWeightedGraph(&graph);
+
+		WeightedGraph mst;
+		if (handle.algorithm == 0) {
+			double start = MPI_Wtime();
+			mst = mstKruskal(&graph);
+			printf("Time elapsed: %f\n", MPI_Wtime() - start);
+		} else if (handle.algorithm == 1) {
+
+		} else if (handle.algorithm == 2) {
+
+		}
+
+		printf("MST:\n");
+		printWeightedGraph(&mst);
+
+		printf("Maze:\n");
+		printMaze(&mst, handle.rows, handle.columns);
+
+		free(graph.edgeList);
+		free(mst.edgeList);
+
+		printf("Finished\n");
+	}
+
+	MPI_Finalize();
+
+	exit(0);
+}
+
+void createMazeFile(const int rows, const int columns,
+		const char outputFileName[]) {
+	FILE* outputFile;
+	const char* outputMode = "w";
+
+	outputFile = fopen(outputFileName, outputMode);
+	if (outputFile == NULL) {
+		printf("Could not open output file, exiting!");
+		exit(1);
+	}
+
+	const int vertices = rows * columns;
+	const int edges = vertices * 2 - rows - columns;
+	fprintf(outputFile, "%d %d\n", vertices, edges);
+
+	srand(time(NULL));
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < columns; j++) {
+			const int vertice = i * columns + j;
+			if (j != columns - 1) {
+				fprintf(outputFile, "%d %d %d\n", vertice, vertice + 1,
+						rand() % 20);
+			}
+			if (i != rows - 1) {
+				fprintf(outputFile, "%d %d %d\n", vertice, vertice + columns,
+						rand() % 20);
+			}
+		}
+	}
+	fclose(outputFile);
+}
+
+int createsLoop(const WeightedGraph* graph, int currentEdge) {
+	int from = graph->edgeList[currentEdge * edgeMembers];
+	int to = graph->edgeList[currentEdge * edgeMembers + 1];
+	if (graph->cannonicalElements[from] == graph->cannonicalElements[to]) {
+		return 1;
+	} else {
+		int replace = graph->cannonicalElements[from];
+		for (int i = 0; i < graph->vertices; i++) {
+			if (graph->cannonicalElements[i] == replace) {
+				graph->cannonicalElements[i] = graph->cannonicalElements[to];
+			}
+		}
+		return 0;
+	}
+}
+
+void mergeSort(int* edgeList, int start, int size) {
+	if (start == size) {
+		return;
+	}
+
+	int length = size - start + 1;
+	int pivot = 0;
+	int merge1 = 0;
+	int merge2 = 0;
+	int working[length][edgeMembers];
+
+	pivot = (start + size) / 2;
+
+	mergeSort(edgeList, start, pivot);
+	mergeSort(edgeList, pivot + 1, size);
+
+	for (int i = 0; i < length; i++) {
+		for (int j = 0; j < edgeMembers; j++) {
+			working[i][j] = edgeList[(i + start) * edgeMembers + j];
+		}
+	}
+
+	merge1 = 0;
+	merge2 = pivot - start + 1;
+
+	for (int i = 0; i < length; i++) {
+		if (merge2 <= size - start) {
+			if (merge1 <= pivot - start) {
+				//printf("%d %d\n", working[merge1][2], working[merge2][2]);
+				if (working[merge1][2] > working[merge2][2]) {
+					for (int j = 0; j < edgeMembers; j++) {
+						edgeList[(i + start) * edgeMembers + j] =
+								working[merge2][j];
+					}
+					merge2++;
+				} else {
+					for (int j = 0; j < edgeMembers; j++) {
+						edgeList[(i + start) * edgeMembers + j] =
+								working[merge1][j];
+					}
+					merge1++;
+				}
+			} else {
+				for (int j = 0; j < edgeMembers; j++) {
+					edgeList[(i + start) * edgeMembers + j] =
+							working[merge2][j];
+				}
+				merge2++;
+			}
+		} else {
+			for (int j = 0; j < edgeMembers; j++) {
+				edgeList[(i + start) * edgeMembers + j] = working[merge1][j];
+			}
+			merge1++;
+		}
+	}
+}
+
+WeightedGraph mstKruskal(const WeightedGraph* graph) {
+	sort(graph);
+
+	int currentEdge = 0;
+	int edgesMST = 0;
+	int edgeListMST[graph->vertices - 1][edgeMembers];
+	while (edgesMST < graph->vertices - 1) {
+		if (!createsLoop(graph, currentEdge)) {
+			for (int i = 0; i < edgeMembers; i++) {
+				edgeListMST[edgesMST][i] = graph->edgeList[currentEdge
+						* edgeMembers + i];
+			}
+			edgesMST++;
+		}
+		currentEdge++;
+	}
+
+	return newWeightedGraph(graph->vertices, graph->vertices - 1, edgeListMST,
+			graph->cannonicalElements);
+}
+
+WeightedGraph newWeightedGraph(const int vertices, const int edges,
+		int edgeList[edges][edgeMembers], int cannonicalElements[vertices]) {
+	WeightedGraph graph;
+	graph.edges = edges;
+	graph.vertices = vertices;
+	graph.edgeList = (int*) malloc(edges * edgeMembers * sizeof(int));
+	memset(graph.edgeList, 0, edges * edgeMembers * sizeof(int));
+	graph.cannonicalElements = (int*) malloc(vertices * sizeof(int));
+	memset(graph.cannonicalElements, 0, vertices * sizeof(int));
+
+	for (int i = 0; i < edges; i++) {
+		for (int j = 0; j < edgeMembers; j++) {
+			graph.edgeList[i * edgeMembers + j] = edgeList[i][j];
+		}
+	}
+
+	for (int i = 0; i < vertices; i++) {
+		graph.cannonicalElements[i] = cannonicalElements[i];
+	}
+
+	return graph;
+}
+
+void printMaze(const WeightedGraph* graph, int rows, int columns) {
+	int rowsMaze = rows * 2 - 1;
+	int columnsMaze = columns * 2 - 1;
+	char maze[rowsMaze][columnsMaze];
+	memset(maze, ' ', rowsMaze * columnsMaze * sizeof(char));
+
+	for (int i = 0; i < rowsMaze; i++) {
+		for (int j = 0; j < columnsMaze; j++) {
+			if (i % 2 == 0 && j % 2 == 0) {
+				maze[i][j] = '+';
+			}
+		}
+	}
+
+	for (int i = 0; i < graph->edges; i++) {
+		int from = graph->edgeList[i * edgeMembers];
+		int to = graph->edgeList[i * edgeMembers + 1];
+		int row = from / columns + to / columns;
+		if ((row % 2)) {
+			// even rows
+			maze[row][(to % columns) * 2] = '|';
+		} else {
+			// uneven rows
+			maze[row][(to % columns - 1) * 2 + 1] = '-';
+		}
+	}
+
+	for (int i = 0; i < rowsMaze; i++) {
+		for (int j = 0; j < columnsMaze; j++) {
+			printf("%c", maze[i][j]);
+		}
+		printf("\n");
+	}
+
+}
+
+void printWeightedGraph(const WeightedGraph* graph) {
+	for (int i = 0; i < graph->edges; i++) {
+		for (int j = 0; j < edgeMembers; j++) {
+			printf("%d\t", graph->edgeList[i * edgeMembers + j]);
+		}
+		printf("\n");
+	}
+}
+
+Handle processParameters(int argc, char* argv[]) {
+	Handle handle = { .algorithm = 0, .columns = 3, .parallel = 0, .rows = 2 };
+
+	if (argc > 1) {
+		while ((argc > 1) && (argv[1][0] == '-')) {
+			switch (argv[1][1]) {
+
+			case 'a':
+				handle.algorithm = atoi(&argv[2][0]);
+				++argv;
+				--argc;
+				break;
+
+			case 'c':
+				handle.columns = atoi(&argv[2][0]);
+				++argv;
+				--argc;
+				break;
+
+			case 'h':
+				printf("Help\n");
+				break;
+
+			case 'p':
+				handle.parallel = atoi(&argv[2][0]);
+				++argv;
+				--argc;
+				break;
+
+			case 'r':
+				handle.rows = atoi(&argv[2][0]);
+				++argv;
+				--argc;
+				break;
+
+			default:
+				printf("Wrong parameter: %s\n", argv[1]);
+				printf("-h for help\n");
+				exit(1);
+			}
+
+			++argv;
+			--argc;
+		}
+	}
+
+	return handle;
+}
+
+WeightedGraph readMazeFile(const char inputFileName[]) {
+	FILE* inputFile;
+	const char* inputMode = "r";
+	inputFile = fopen(inputFileName, inputMode);
+	if (inputFile == NULL) {
+		printf("Could not open input file, exiting!");
+		exit(1);
+	}
+
+	int vertices;
+	int edges;
+	fscanf(inputFile, "%d %d", &vertices, &edges);
+
+	int from;
+	int to;
+	int weight;
+	int edgeList[edges][edgeMembers];
+	for (int i = 0; i < edges; i++) {
+		fscanf(inputFile, "%d %d %d", &from, &to, &weight);
+		edgeList[i][0] = from;
+		edgeList[i][1] = to;
+		edgeList[i][2] = weight;
+	}
+	fclose(inputFile);
+
+	int cannonicalElements[vertices];
+	for (int i = 0; i < vertices; i++) {
+		cannonicalElements[i] = i;
+	}
+
+	return newWeightedGraph(vertices, edges, edgeList, cannonicalElements);
+}
+
+void sort(const WeightedGraph* graph) {
+	mergeSort(graph->edgeList, 0, graph->edges - 1);
+
+//	int * data;
+//	int * chunk;
+//	int * other;
+//	int m, n = 3e07;
+//	int id, p;
+//	int s = 0;
+//	int i;
+//	int step;
+//	int id;
+//	int size;
+//	int* chunk;
+//	int processes = 1; // TODO
+//	MPI_Status status;
+//	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+//
+//	if (id == 0) {
+//		int r;
+//		//srandom(clock());
+//		size = graph->edges / processes;
+//		r = graph->edges % processes;
+//		//data = (int *) malloc((n + size - r) * sizeof(int));
+//		if (r != 0) {
+//			for (int i = graph->edges; i < graph->edges + size - r; i++) {
+//				data[i] = 0;
+//			}
+//			size = size + 1;
+//		}
+//
+//		MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+//		chunk = (int*) malloc(size * edgeMembers * sizeof(int));
+//		MPI_Scatter(graph->edgeList, size, MPI_INT, chunk, size,
+//		MPI_INT, 0,
+//		MPI_COMM_WORLD);
+//		mergeSort(chunk, 0, size - 1);
+//		/* showVector(chunk, size, id); */
+//	} else {
+//		MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+//		chunk = (int *) malloc(size * sizeof(int));
+//		MPI_Scatter(graph->edgeList, size, MPI_INT, chunk, size,
+//		MPI_INT, 0,
+//		MPI_COMM_WORLD);
+//		mergeSort(chunk, 0, size - 1);
+//		/* showVector(chunk, size, id); */
+//	}
+//
+//	int step = 1;
+//	while (step < processes) {
+//		if (id % (2 * step) == 0) {
+//			if (id + step < processes) {
+//				MPI_Recv(&size, 1, MPI_INT, id + step, 0, MPI_COMM_WORLD, &status);
+//				other = (int *) malloc(size * sizeof(int));
+//				MPI_Recv(other, size, MPI_INT, id + step, 0, MPI_COMM_WORLD,
+//						&status);
+//				chunk = merge(chunk, size, other, size);
+//				size = size + size;
+//			}
+//		} else {
+//			int near = id - step;
+//			MPI_Send(&size, 1, MPI_INT, near, 0, MPI_COMM_WORLD);
+//			MPI_Send(chunk, size, MPI_INT, near, 0, MPI_COMM_WORLD);
+//			break;
+//		}
+//		step = step * 2;
+//	}
+}

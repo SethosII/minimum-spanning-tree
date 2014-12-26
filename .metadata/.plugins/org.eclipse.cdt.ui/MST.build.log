@@ -1,0 +1,22 @@
+21:36:56 **** Incremental Build of configuration Release for project MST ****
+make all 
+Building file: ../src/main.c
+Invoking: GCC C Compiler
+mpicc -std=c11 -I/usr/lib/openmpi/include/ -I/usr/include/mpi/ -O3 -Wall -c -fmessage-length=0 -MMD -MP -MF"src/main.d" -MT"src/main.d" -o "src/main.o" "../src/main.c"
+../src/main.c: In function ‘mstPrim’:
+../src/main.c:448:6: warning: variable ‘currentEdge’ set but not used [-Wunused-but-set-variable]
+  int currentEdge = INT_MAX;
+      ^
+../src/main.c:443:6: warning: variable ‘mstVertices’ set but not used [-Wunused-but-set-variable]
+  int mstVertices[graph->vertices];
+      ^
+Finished building: ../src/main.c
+ 
+Building target: MST
+Invoking: GCC C Linker
+gcc -L/usr/lib/openmpi/lib/ -o "MST"  ./src/main.o   -lmpi
+Finished building target: MST
+ 
+
+21:36:56 Build Finished (took 304ms)
+

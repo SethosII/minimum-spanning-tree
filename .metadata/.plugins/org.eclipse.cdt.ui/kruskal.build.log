@@ -1,0 +1,6 @@
+13:20:15 **** Incremental Build of configuration Release for project kruskal ****
+make all 
+make: Für das Ziel »all« ist nichts zu tun.
+
+13:20:15 Build Finished (took 55ms)
+

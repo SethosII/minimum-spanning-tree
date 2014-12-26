@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.equinox.internal.p2.ui.dialogs.UpdateWizard.ResolutionResultsPage">
+		<item value="800" key="ListSashWeight"/>
+		<item value="360" key="NameColumnWidth"/>
+		<item value="200" key="DetailsSashWeight"/>
+		<item value="240" key="IDColumnWidth"/>
+		<item value="120" key="VersionColumnWidth"/>
+	</section>
+	<section name="org.eclipse.equinox.internal.p2.ui.dialogs.UpdateWizard.SelectableIUsPage">
+		<item value="800" key="ListSashWeight"/>
+		<item value="360" key="NameColumnWidth"/>
+		<item value="200" key="DetailsSashWeight"/>
+		<item value="240" key="IDColumnWidth"/>
+		<item value="120" key="VersionColumnWidth"/>
+	</section>
+	<section name="org.eclipse.equinox.internal.p2.ui.dialogs.UpdateWizard.WizardSettings">
+		<item value="707" key="DIALOG_WIDTH"/>
+		<item value="365" key="DIALOG_Y_ORIGIN"/>
+		<item value="528" key="DIALOG_HEIGHT"/>
+		<item value="464" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+</section>

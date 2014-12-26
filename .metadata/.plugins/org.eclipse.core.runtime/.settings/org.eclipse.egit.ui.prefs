@@ -1,0 +1,7 @@
+//BranchProjectTracker__/home/paul/Dropbox/Programmierung/cdt/MST/.git_boruvka=<?xml version\="1.0" encoding\="UTF-8"?>\n<projects branch\="boruvka">\n<project>/</project>\n</projects>
+//BranchProjectTracker__/home/paul/Dropbox/Programmierung/cdt/MST/.git_development=<?xml version\="1.0" encoding\="UTF-8"?>\n<projects branch\="development">\n<project>/</project>\n</projects>
+//BranchProjectTracker__/home/paul/Dropbox/Programmierung/cdt/MST/.git_kruskal=<?xml version\="1.0" encoding\="UTF-8"?>\n<projects branch\="kruskal">\n<project>/</project>\n</projects>
+//BranchProjectTracker__/home/paul/Dropbox/Programmierung/cdt/MST/.git_prim=<?xml version\="1.0" encoding\="UTF-8"?>\n<projects branch\="prim">\n<project>/</project>\n</projects>
+commit_dialog_history_messages=<?xml version\="1.0" encoding\="UTF-8"?>\n<messages>\n<message>bla</message>\n<message>added LinkedList&\#x0A;commented AdjacencyList out</message>\n<message>test</message>\n<message>Small changes to structs, help message, and comments&\#x0A;added member help to Handle struct for proper exit after displaying the&\#x0A;help message&\#x0A;size of MPI_HANDLE is now set dynamic depending on the number of int&apos;s&\#x0A;in the Handle struct&\#x0A;updated help message&\#x0A;small formatting and comment changes</message>\n<message>First version&\#x0A;Kruskal&apos;s algorithm working</message>\n</messages>
+eclipse.preferences.version=1
+merge_mode=0

@@ -1,0 +1,29 @@
+#include<stdio.h>
+#include<stdlib.h>
+
+typedef struct Node {
+	int value;
+	struct Node* next;
+} LinkedList;
+
+LinkedList* newNode( data) {
+	LinkedList* node = malloc(sizeof(LinkedList));
+	node->value = data;
+	node->next = NULL;
+	return node;
+}
+
+void insertNode(LinkedList* list, int data) {
+	if (list->next == NULL) {
+		LinkedList new = newNode(data);
+		list->next = new;
+	} else {
+		insertList(list->next, data);
+	}
+}
+
+int main(int argc, char* argv[]) {
+	LinkedList list = newNode(0);
+
+	return 0;
+}

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<item value="561" key="DIALOG_WIDTH"/>
+	<item value="146" key="DIALOG_Y_ORIGIN"/>
+	<item value="1" key="org.eclipse.egit.ui.internal.clone.GitSelectWizardPageWizardSel"/>
+	<item value="681" key="DIALOG_X_ORIGIN"/>
+	<item value="568" key="DIALOG_HEIGHT"/>
+	<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	<item value="true" key="CommitDialog.showUntracked"/>
+	<list key="CommitDialog.authorValues">
+		<item value="SethosII &lt;paul.jaehne@gmx.de&gt;"/>
+	</list>
+	<list key="CommitDialog.committerValues">
+		<item value="SethosII &lt;paul.jaehne@gmx.de&gt;"/>
+	</list>
+	<list key="RepositorySelectionPage.UsedUris">
+		<item value="ssh://git@github.com/SethosII/minimum-spanning-tree.git"/>
+	</list>
+	<section name="GitImportWizard">
+	</section>
+	<section name="org.eclipse.egit.ui.internal.dialogs.MergeTargetSelectionDialog.dialogBounds">
+		<item value="527" key="DIALOG_WIDTH"/>
+		<item value="44" key="DIALOG_Y_ORIGIN"/>
+		<item value="721" key="DIALOG_HEIGHT"/>
+		<item value="699" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="GitCommitMessageComponent">
+	</section>
+	<section name="org.eclipse.egit.ui.COMMIT_DIALOG_SECTION">
+		<item value="628" key="DIALOG_WIDTH"/>
+		<item value="86" key="DIALOG_Y_ORIGIN"/>
+		<item value="658" key="DIALOG_HEIGHT"/>
+		<item value="647" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.egit.ui.internal.pull.PullResultDialog.dialogBounds">
+		<item value="1920" key="DIALOG_WIDTH"/>
+		<item value="243" key="DIALOG_Y_ORIGIN"/>
+		<item value="422" key="DIALOG_HEIGHT"/>
+		<item value="0" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.egit.ui.internal.merge.MergeResultDialog.dialogBounds">
+		<item value="730" key="DIALOG_WIDTH"/>
+		<item value="381" key="DIALOG_Y_ORIGIN"/>
+		<item value="215" key="DIALOG_HEIGHT"/>
+		<item value="596" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.egit.ui.internal.repository.CreateBranchPage$SourceSelectionDialog.dialogBounds">
+		<item value="525" key="DIALOG_WIDTH"/>
+		<item value="-100" key="DIALOG_Y_ORIGIN"/>
+		<item value="489" key="DIALOG_HEIGHT"/>
+		<item value="0" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.egit.ui.internal.push.PushResultDialog.dialogBounds">
+		<item value="652" key="DIALOG_WIDTH"/>
+		<item value="220" key="DIALOG_Y_ORIGIN"/>
+		<item value="456" key="DIALOG_HEIGHT"/>
+		<item value="635" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Noto Sans|9.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
+</section>
