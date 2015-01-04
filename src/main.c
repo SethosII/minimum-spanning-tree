@@ -5,6 +5,9 @@
 #include <time.h>
 #include <mpi.h>
 
+//#define priq_purge(q) (q)->n = 1
+//#define priq_size(q) ((q)->n - 1)
+
 const int EDGE_MEMBERS = 3;
 const int UNSET_CANONICAL_ELEMENT = -1;
 const int NO_EDGE = -1;
@@ -22,13 +25,14 @@ typedef struct {
 } Handle;
 
 typedef struct Node {
-	int value;
+	int to;
+	int weight;
 	struct Node* next;
 } LinkedList;
 
 typedef struct {
 	int elements;
-	LinkedList lists[];
+	LinkedList** lists;
 } AdjacencyList;
 
 typedef struct {
@@ -43,59 +47,146 @@ typedef struct {
 	int* edgeList;
 } WeightedGraph;
 
+typedef struct {
+	void * data;
+	int pri;
+} QueueElement;
+
+typedef struct {
+	QueueElement *buf;
+	int n, alloc;
+} PriorityQueue;
+
+/*
+ * first element in array not used to simplify indices
+ */
+PriorityQueue* newPriorityQueue(int size) {
+	if (size < 4) {
+		size = 4;
+	}
+
+	PriorityQueue* q = malloc(sizeof(PriorityQueue));
+	q->buf = malloc(sizeof(QueueElement) * size);
+	q->alloc = size;
+	q->n = 1;
+
+	return q;
+}
+
+void pushPriorityQueue(PriorityQueue* q, void *data, int pri) {
+	QueueElement *b;
+	int n, m;
+
+	if (q->n >= q->alloc) {
+		q->alloc *= 2;
+		b = q->buf = realloc(q->buf, sizeof(QueueElement) * q->alloc);
+	} else {
+		b = q->buf;
+	}
+
+	n = q->n++;
+	// append at end, then up heap
+	while ((m = n / 2) && pri < b[m].pri) {
+		b[n] = b[m];
+		n = m;
+	}
+	b[n].data = data;
+	b[n].pri = pri;
+}
+
+/*
+ * remove top item. returns 0 if empty. *pri can be null.
+ */
+void * popPriorityQueue(PriorityQueue* q, int *pri) {
+	void *out;
+	if (q->n == 1) {
+		return 0;
+	}
+
+	QueueElement *b = q->buf;
+
+	out = b[1].data;
+	if (pri) {
+		*pri = b[1].pri;
+	}
+
+	// pull last item to top, then down heap.
+	--q->n;
+
+	int n = 1, m;
+	while ((m = n * 2) < q->n) {
+		if (m + 1 < q->n && b[m].pri > b[m + 1].pri) {
+			m++;
+		}
+
+		if (b[q->n].pri <= b[m].pri) {
+			break;
+		}
+		b[n] = b[m];
+		n = m;
+	}
+
+	b[n] = b[q->n];
+	if (q->n < q->alloc / 2 && q->n >= 16) {
+		q->buf = realloc(q->buf, (q->alloc /= 2) * sizeof(b[0]));
+	}
+
+	return out;
+}
+
+/*
+ * get the top element without removing it from queue
+ */
+void* getMinPriorityQueue(PriorityQueue* q, int *pri) {
+	if (q->n == 1) {
+		return 0;
+	}
+	if (pri) {
+		*pri = q->buf[1].pri;
+	}
+	return q->buf[1].data;
+}
+
+/*
+ * this is O(n log n), but probably not the best
+ */
+void combinePriorityQueue(PriorityQueue* q, PriorityQueue* q2) {
+	int i;
+	QueueElement *e = q2->buf + 1;
+
+	for (i = q2->n - 1; i >= 1; i--, e++) {
+		pushPriorityQueue(q, e->data, e->pri);
+	}
+	(q2)->n = 1;
+}
+
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 int createsLoop(const WeightedGraph* graph, int currentedge, Set* set);
 void deleteSet(Set* set);
 void deleteWeightedGraph(WeightedGraph* graph);
 int findSet(Set* set, int vertex);
+void getNeighbors(const LinkedList* list, int* neighbors, const int vertex,
+		const int step);
+int insertNode(LinkedList* list, int to, int weight);
 void merge(int* edgeList, int start, int size, int pivot);
 void mergeSort(int* edgeList, int start2, int size2);
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst);
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set);
+void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst);
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst);
+void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph);
+LinkedList* newNode(int to, int weight);
 void newSet(Set* set, const int elements);
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges);
+void printAdjacencyList(const AdjacencyList* list);
+void printLinkedList(LinkedList* list);
 void printMaze(const WeightedGraph* graph, int rows, int columns);
+void printSet(const Set* set);
 void printWeightedGraph(const WeightedGraph* graph);
 Handle processParameters(int argc, char* argv[]);
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
 void unionSet(Set* set, const int parent1, const int parent2);
-
-/*
- * create new node
- */
-LinkedList* newNode(int data) {
-	LinkedList* node = malloc(sizeof(LinkedList));
-	node->value = data;
-	node->next = NULL;
-	return node;
-}
-
-/*
- * insert node at the end, if not existent
- */
-void insertNode(LinkedList* list, int data) {
-	if (list->value != data) {
-		if (list->next == NULL) {
-			LinkedList* new = newNode(data);
-			list->next = new;
-		} else {
-			insertNode(list->next, data);
-		}
-	}
-}
-
-/*
- * print the data of a linked list
- */
-void printList(LinkedList* list) {
-	printf("%d ", list->value);
-	if (list->next != NULL) {
-		printList(list->next);
-	}
-}
 
 /*
  * main program
@@ -119,8 +210,6 @@ int main(int argc, char* argv[]) {
 					.edgeList = NULL };
 	WeightedGraph* mst = &(WeightedGraph ) { .edges = 0, .vertices = 0,
 					.edgeList = NULL };
-	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
-			NULL };
 
 	if (rank == 0) {
 		printf("Starting\n");
@@ -143,7 +232,6 @@ int main(int argc, char* argv[]) {
 
 		// read the maze file and store it in the graph
 		readMazeFile(graph, "maze.csv");
-		newSet(set, graph->vertices);
 
 		if (handle.verbose == 1) {
 			// print the edges of the read graph
@@ -157,7 +245,7 @@ int main(int argc, char* argv[]) {
 	double start = MPI_Wtime();
 	if (handle.algorithm == 0) {
 		// use Kruskal's algorithm
-		mstKruskal(graph, mst, set);
+		mstKruskal(graph, mst);
 	} else if (handle.algorithm == 1) {
 		// use Prim's algorithm
 		mstPrim(graph, mst);
@@ -182,7 +270,6 @@ int main(int argc, char* argv[]) {
 		}
 
 		// cleanup
-		deleteSet(set);
 		deleteWeightedGraph(graph);
 		deleteWeightedGraph(mst);
 
@@ -215,15 +302,16 @@ void createMazeFile(const int rows, const int columns,
 
 	// all lines after the first contain the edges, values stored as "from to weight"
 	srand(time(NULL));
+	int vertex;
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < columns; j++) {
-			const int vertice = i * columns + j;
+			vertex = i * columns + j;
 			if (j != columns - 1) {
-				fprintf(outputFile, "%d %d %d\n", vertice, vertice + 1,
+				fprintf(outputFile, "%d %d %d\n", vertex, vertex + 1,
 						rand() % MAXIMUM_RANDOM);
 			}
 			if (i != rows - 1) {
-				fprintf(outputFile, "%d %d %d\n", vertice, vertice + columns,
+				fprintf(outputFile, "%d %d %d\n", vertex, vertex + columns,
 						rand() % MAXIMUM_RANDOM);
 			}
 		}
@@ -279,6 +367,35 @@ int findSet(Set* set, int vertex) {
 				set->canonicalElements[vertex]);
 		return set->canonicalElements[vertex];
 	}
+}
+
+/*
+ * get neighbors to specified vertex
+ */
+void getNeighbors(const LinkedList* list, int* neighbors, const int vertex,
+		const int step) {
+	if (list->next != NULL) {
+		getNeighbors(list->next, neighbors, vertex, step + 2);
+	}
+	neighbors[step] = list->to;
+	neighbors[step + 1] = list->weight;
+}
+
+/*
+ * insert node at the end, if not existent
+ */
+int insertNode(LinkedList* list, int to, int weight) {
+	int inserted = 0;
+	if (list->to != to) {
+		if (list->next == NULL) {
+			LinkedList* new = newNode(to, weight);
+			list->next = new;
+			inserted = 1;
+		} else {
+			inserted = insertNode(list->next, to, weight);
+		}
+	}
+	return inserted;
 }
 
 /*
@@ -399,12 +516,63 @@ void mergeSort(int* edgeList, int start, int size) {
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 	printf("DUMMY!\n");
 
+	// create needed data structures
+	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
+			NULL };
+	AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
+	newSet(set, graph->vertices);
+	newAdjacencyList(list, graph);
+	int* neighbors[list->elements];
+	for (int i = 0; i < graph->vertices; i++) {
+		neighbors[i] = (int*) malloc(2 * list->lists[i]->to * sizeof(int));
+		getNeighbors(list->lists[i]->next, neighbors[i], i, 0);
+	}
+
+	// clean up
+	deleteSet(set);
+	for (int i = 0; i < list->elements; i++) {
+		free(neighbors[i]);
+	}
+
+	/*		// foreach tree in forest, find closest edge
+	 // if edge weights are equal, ties are broken in favor of first edge
+	 // in G.Edge()
+	 Edge[] closest = new Edge[G.V()];
+	 for (Edge e : G.Edge())
+	 {
+	 int v = e.either(), w = e.other(v);
+	 int i = uf.find(v), j = uf.find(w);
+	 if (i == j)
+	 continue;   // same tree
+	 if (closest[i] == null || less(e, closest[i]))
+	 closest[i] = e;
+	 if (closest[j] == null || less(e, closest[j]))
+	 closest[j] = e;
+	 }
+
+	 // add newly discovered Edge to MST
+	 for (int i = 0; i < G.V(); i++) {
+	 Edge e = closest[i];
+	 if (e != null) {
+	 int v = e.either(), w = e.other(v);
+	 // don't add the same edge twice
+	 if (!uf.connected(v, w)) {
+	 mst.add(e);
+	 weight += e.weight();
+	 uf.union(v, w);
+	 }
+	 }*/
 }
 
 /*
  * find a MST of the graph using Kruskal's algorithm
  */
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
+void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
+	// create needed data structures
+	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
+			NULL };
+	newSet(set, graph->vertices);
+
 	int rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -436,6 +604,9 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
 			currentEdge++;
 		}
 	}
+
+	// clean up
+	deleteSet(set);
 }
 
 /*
@@ -468,22 +639,50 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	printf("DUMMY!\n");
 
-	LinkedList* lists[graph->vertices];
+	// create needed data structures
+	AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
+	newAdjacencyList(list, graph);
+}
+
+/*
+ * create adjacency list
+ */
+void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph) {
+	list->elements = graph->vertices;
+	list->lists = (LinkedList**) malloc(graph->vertices * sizeof(LinkedList));
+	int inserts[graph->vertices];
 	for (int i = 0; i < graph->vertices; i++) {
-		lists[i] = newNode(i);
+		inserts[i] = 0;
+	}
+	for (int i = 0; i < graph->vertices; i++) {
+		list->lists[i] = newNode(i, 0);
 	}
 	for (int i = 0; i < graph->edges; i++) {
-		insertNode(lists[graph->edgeList[i * EDGE_MEMBERS]],
-				graph->edgeList[i * EDGE_MEMBERS + 1]);
-		insertNode(lists[graph->edgeList[i * EDGE_MEMBERS + 1]],
-				graph->edgeList[i * EDGE_MEMBERS]);
+		if (insertNode(list->lists[graph->edgeList[i * EDGE_MEMBERS]],
+				graph->edgeList[i * EDGE_MEMBERS + 1],
+				graph->edgeList[i * EDGE_MEMBERS + 2])) {
+			inserts[graph->edgeList[i * EDGE_MEMBERS]]++;
+		}
+		if (insertNode(list->lists[graph->edgeList[i * EDGE_MEMBERS + 1]],
+				graph->edgeList[i * EDGE_MEMBERS],
+				graph->edgeList[i * EDGE_MEMBERS + 2])) {
+			inserts[graph->edgeList[i * EDGE_MEMBERS + 1]]++;
+		}
 	}
-
-	printf("Adjacency list:\n");
 	for (int i = 0; i < graph->vertices; i++) {
-		printList(lists[i]);
-		printf("\n");
+		list->lists[i]->to = inserts[i];
 	}
+}
+
+/*
+ * create new node
+ */
+LinkedList* newNode(int to, int weight) {
+	LinkedList* node = malloc(sizeof(LinkedList));
+	node->to = to;
+	node->weight = weight;
+	node->next = NULL;
+	return node;
 }
 
 /*
@@ -506,6 +705,26 @@ void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges)
 	graph->vertices = vertices;
 	graph->edgeList = (int*) malloc(edges * EDGE_MEMBERS * sizeof(int));
 	memset(graph->edgeList, 0, edges * EDGE_MEMBERS * sizeof(int));
+}
+
+/*
+ * prints the adjacency list
+ */
+void printAdjacencyList(const AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		printLinkedList(list->lists[i]);
+		printf("\n");
+	}
+}
+
+/*
+ * print the data of a linked list
+ */
+void printLinkedList(LinkedList* list) {
+	printf("%d(%d) ", list->to, list->weight);
+	if (list->next != NULL) {
+		printLinkedList(list->next);
+	}
 }
 
 /*
@@ -547,6 +766,15 @@ void printMaze(const WeightedGraph* graph, int rows, int columns) {
 			printf("%c", maze[i][j]);
 		}
 		printf("\n");
+	}
+}
+
+/*
+ * print the components of the set
+ */
+void printSet(const Set* set) {
+	for (int i = 0; i < set->elements; i++) {
+		printf("%d: %d(%d)\n", i, set->canonicalElements[i], set->rank[i]);
 	}
 }
 
