@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,14 +49,111 @@ typedef struct {
 } WeightedGraph;
 
 typedef struct {
-	void * data;
-	int pri;
+	int to;
+	int weight;
 } QueueElement;
 
 typedef struct {
 	QueueElement *buf;
 	int n, alloc;
 } PriorityQueue;
+
+typedef struct {
+	int vertice;
+	int weight;
+} HeapElement;
+
+typedef struct {
+	int alloced;
+	int size;
+	HeapElement* elements;
+} BinaryMinHeap;
+
+/*
+ * helper function to swap heap elements
+ */
+void swapHeapElement(BinaryMinHeap* heap, int position1, int position2) {
+	HeapElement swap = heap->elements[position1];
+	heap->elements[position1] = heap->elements[position2];
+	heap->elements[position2] = swap;
+}
+
+/*
+ * print binary min heap
+ */
+void printBinaryHeap(const BinaryMinHeap* heap) {
+	for (int i = 0; i < heap->size; i++) {
+		printf("%d(%d) ", heap->elements[i].vertice, heap->elements[i].weight);
+		if (log2(i + 2) == (int) log2(i + 2)) {
+			// line break after each stage
+			printf("\n");
+		}
+	}
+	printf("\n");
+}
+
+/*
+ * check and restore heap property from given position upwards
+ */
+void heapifyBinaryMinHeap(BinaryMinHeap* heap, int position) {
+	while (position >= 1) {
+		int positionParent = (position - 1) / 2;
+		if (heap->elements[position].weight
+				< heap->elements[positionParent].weight) {
+			swapHeapElement(heap, position, positionParent);
+			position /= 2;
+		} else {
+			break;
+		}
+	}
+}
+
+/*
+ * create binary min heap
+ */
+void newBinaryMinHeap(BinaryMinHeap* heap) {
+	heap->alloced = 2;
+	heap->size = 0;
+	heap->elements = (HeapElement*) malloc(2 * sizeof(HeapElement));
+}
+
+/*
+ * cleanup heap data
+ */
+void deleteBinaryMinHeap(BinaryMinHeap* heap) {
+	free(heap->elements);
+}
+
+/*
+ * push a new element to the end, then bubble up
+ */
+void pushBinaryMinHeap(BinaryMinHeap* heap, int vertice, int weight) {
+	if (heap->size == (heap->alloced - 1)) {
+		heap->elements = (HeapElement*) realloc(heap->elements,
+				2 * heap->alloced * sizeof(HeapElement));
+	}
+	heap->elements[heap->size] = (HeapElement ) { .vertice = vertice, .weight =
+					weight };
+
+	// heapify
+	heapifyBinaryMinHeap(heap, heap->size);
+
+	heap->size++;
+}
+
+/*
+ * only decrease a the weight to a given vertex
+ */
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, int vertice, int weight) {
+
+}
+
+/*
+ * remove the minimum of the heap
+ */
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* weight) {
+
+}
 
 /*
  * first element in array not used to simplify indices
@@ -73,41 +171,42 @@ PriorityQueue* newPriorityQueue(int size) {
 	return q;
 }
 
-void pushPriorityQueue(PriorityQueue* q, void *data, int pri) {
+void pushPriorityQueue(PriorityQueue* q, int to, int weight) {
 	QueueElement *b;
 	int n, m;
 
 	if (q->n >= q->alloc) {
 		q->alloc *= 2;
-		b = q->buf = realloc(q->buf, sizeof(QueueElement) * q->alloc);
+		q->buf = realloc(q->buf, sizeof(QueueElement) * q->alloc);
+		b = q->buf;
 	} else {
 		b = q->buf;
 	}
 
 	n = q->n++;
 	// append at end, then up heap
-	while ((m = n / 2) && pri < b[m].pri) {
+	while ((m = n / 2) && weight < b[m].weight) {
 		b[n] = b[m];
 		n = m;
 	}
-	b[n].data = data;
-	b[n].pri = pri;
+	b[n].to = to;
+	b[n].weight = weight;
 }
 
 /*
- * remove top item. returns 0 if empty. *pri can be null.
+ * remove top item, returns -1 if empty, *weight can be NULL
  */
-void * popPriorityQueue(PriorityQueue* q, int *pri) {
-	void *out;
+int popPriorityQueue(PriorityQueue* q, int *weight) {
+	int out;
 	if (q->n == 1) {
-		return 0;
+		return -1;
 	}
 
 	QueueElement *b = q->buf;
 
-	out = b[1].data;
-	if (pri) {
-		*pri = b[1].pri;
+	out = b[1].to;
+	if (weight) {
+		*weight = b[1].weight;
 	}
 
 	// pull last item to top, then down heap.
@@ -115,11 +214,11 @@ void * popPriorityQueue(PriorityQueue* q, int *pri) {
 
 	int n = 1, m;
 	while ((m = n * 2) < q->n) {
-		if (m + 1 < q->n && b[m].pri > b[m + 1].pri) {
+		if (m + 1 < q->n && b[m].weight > b[m + 1].weight) {
 			m++;
 		}
 
-		if (b[q->n].pri <= b[m].pri) {
+		if (b[q->n].weight <= b[m].weight) {
 			break;
 		}
 		b[n] = b[m];
@@ -137,14 +236,14 @@ void * popPriorityQueue(PriorityQueue* q, int *pri) {
 /*
  * get the top element without removing it from queue
  */
-void* getMinPriorityQueue(PriorityQueue* q, int *pri) {
+int getMinPriorityQueue(PriorityQueue* q, int *weight) {
 	if (q->n == 1) {
 		return 0;
 	}
-	if (pri) {
-		*pri = q->buf[1].pri;
+	if (weight) {
+		*weight = q->buf[1].weight;
 	}
-	return q->buf[1].data;
+	return q->buf[1].to;
 }
 
 /*
@@ -155,7 +254,7 @@ void combinePriorityQueue(PriorityQueue* q, PriorityQueue* q2) {
 	QueueElement *e = q2->buf + 1;
 
 	for (i = q2->n - 1; i >= 1; i--, e++) {
-		pushPriorityQueue(q, e->data, e->pri);
+		pushPriorityQueue(q, e->to, e->weight);
 	}
 	(q2)->n = 1;
 }
@@ -339,6 +438,16 @@ int createsLoop(const WeightedGraph* graph, int currentEdge, Set* set) {
 		}
 		return 0;
 	}
+}
+
+/*
+ * cleanup adjacency list data
+ */
+void deleteAdjacencyList(AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		free(list->lists[i]);
+	}
+	free(list->lists);
 }
 
 /*
@@ -642,6 +751,25 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	// create needed data structures
 	AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
 	newAdjacencyList(list, graph);
+
+	//printAdjacencyList(list);
+	PriorityQueue* priorityQueue = newPriorityQueue(4);
+	pushPriorityQueue(priorityQueue, 5, 5);
+	pushPriorityQueue(priorityQueue, 2, 2);
+	pushPriorityQueue(priorityQueue, 7, 7);
+
+	BinaryMinHeap* heap = &(BinaryMinHeap ) { .alloced = 0, .size = 0,
+					.elements = NULL };
+	newBinaryMinHeap(heap);
+
+	pushBinaryMinHeap(heap, 5, 5);
+	pushBinaryMinHeap(heap, 2, 2);
+	pushBinaryMinHeap(heap, 7, 7);
+	pushBinaryMinHeap(heap, 1, 1);
+	printBinaryHeap(heap);
+
+	deleteBinaryMinHeap(heap);
+	deleteAdjacencyList(list);
 }
 
 /*
