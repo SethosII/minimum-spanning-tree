@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,14 +22,20 @@ typedef struct {
 	int verbose;
 } Handle;
 
-typedef struct Node {
-	int value;
-	struct Node* next;
-} LinkedList;
+typedef struct {
+	int vertex;
+	int weight;
+} Element;
+
+typedef struct {
+	int alloced;
+	int size;
+	Element* elements;
+} List;
 
 typedef struct {
 	int elements;
-	LinkedList lists[];
+	List* lists;
 } AdjacencyList;
 
 typedef struct {
@@ -43,77 +50,70 @@ typedef struct {
 	int* edgeList;
 } WeightedGraph;
 
+typedef struct {
+	int vertex;
+	int via;
+	int weight;
+} HeapElement;
+
+typedef struct {
+	int alloced;
+	int size;
+	int* positions;
+	HeapElement* elements;
+} BinaryMinHeap;
+
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 int createsLoop(const WeightedGraph* graph, int currentedge, Set* set);
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
+		const int weight);
+void deleteAdjacencyList(AdjacencyList* list);
+void deleteBinaryMinHeap(BinaryMinHeap* heap);
 void deleteSet(Set* set);
 void deleteWeightedGraph(WeightedGraph* graph);
 int findSet(Set* set, int vertex);
+void heapifyBinaryMinHeap(BinaryMinHeap* heap, int position);
+void heapifyDownBinaryMinHeap(BinaryMinHeap* heap, int position);
 void merge(int* edgeList, int start, int size, int pivot);
 void mergeSort(int* edgeList, int start2, int size2);
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst);
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set);
+void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst);
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst);
+void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph);
+void newBinaryMinHeap(BinaryMinHeap* heap);
 void newSet(Set* set, const int elements);
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges);
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight);
+void printAdjacencyList(const AdjacencyList* list);
+void printBinaryHeap(const BinaryMinHeap* heap);
 void printMaze(const WeightedGraph* graph, int rows, int columns);
+void printSet(const Set* set);
 void printWeightedGraph(const WeightedGraph* graph);
 Handle processParameters(int argc, char* argv[]);
+void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight);
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
+		const int weight);
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
+void swapHeapElement(BinaryMinHeap* heap, int position1, int position2);
 void unionSet(Set* set, const int parent1, const int parent2);
-
-/*
- * create new node
- */
-LinkedList* newNode(int data) {
-	LinkedList* node = malloc(sizeof(LinkedList));
-	node->value = data;
-	node->next = NULL;
-	return node;
-}
-
-/*
- * insert node at the end, if not existent
- */
-void insertNode(LinkedList* list, int data) {
-	if (list->value != data) {
-		if (list->next == NULL) {
-			LinkedList* new = newNode(data);
-			list->next = new;
-		} else {
-			insertNode(list->next, data);
-		}
-	}
-}
-
-/*
- * print athe data of a linked list
- */
-void printList(LinkedList* list) {
-	printf("%d ", list->value);
-	if (list->next != NULL) {
-		printList(list->next);
-	}
-}
 
 /*
  * main program
  */
 int main(int argc, char* argv[]) {
 	// MPI variables and initialization
-	int size, rank, namelen;
-	char processor_name[MPI_MAX_PROCESSOR_NAME];
+	int size;
+	int rank;
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Get_processor_name(processor_name, &namelen);
 	MPI_Datatype MPI_HANDLE;
 	MPI_Type_contiguous(sizeof(Handle) / sizeof(int), MPI_INT, &MPI_HANDLE);
 	MPI_Type_commit(&MPI_HANDLE);
-//	printf("Hello world from process %d on %s of %d\n", rank, processor_name, size);
 
-// control variable
+	// control variable
 	Handle handle;
 
 	// graph Variables
@@ -121,8 +121,6 @@ int main(int argc, char* argv[]) {
 					.edgeList = NULL };
 	WeightedGraph* mst = &(WeightedGraph ) { .edges = 0, .vertices = 0,
 					.edgeList = NULL };
-	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
-			NULL };
 
 	if (rank == 0) {
 		printf("Starting\n");
@@ -145,7 +143,6 @@ int main(int argc, char* argv[]) {
 
 		// read the maze file and store it in the graph
 		readMazeFile(graph, "maze.csv");
-		newSet(set, graph->vertices);
 
 		if (handle.verbose == 1) {
 			// print the edges of the read graph
@@ -157,10 +154,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	double start = MPI_Wtime();
-	// printf("%d %d\n", rank, handle.algorithm);
 	if (handle.algorithm == 0) {
 		// use Kruskal's algorithm
-		mstKruskal(graph, mst, set);
+		mstKruskal(graph, mst);
 	} else if (handle.algorithm == 1) {
 		// use Prim's algorithm
 		mstPrim(graph, mst);
@@ -178,6 +174,12 @@ int main(int argc, char* argv[]) {
 			printWeightedGraph(mst);
 		}
 
+		int mstWeight = 0;
+		for (int i = 0; i < mst->edges; i++) {
+			mstWeight += mst->edgeList[i * EDGE_MEMBERS + 2];
+		}
+		printf("MST weight: %d\n", mstWeight);
+
 		if (handle.maze == 1) {
 			// print the maze to the console
 			printf("Maze:\n");
@@ -185,7 +187,6 @@ int main(int argc, char* argv[]) {
 		}
 
 		// cleanup
-		deleteSet(set);
 		deleteWeightedGraph(graph);
 		deleteWeightedGraph(mst);
 
@@ -194,7 +195,7 @@ int main(int argc, char* argv[]) {
 
 	MPI_Finalize();
 
-	exit(0);
+	return 0;
 }
 
 /*
@@ -218,15 +219,16 @@ void createMazeFile(const int rows, const int columns,
 
 	// all lines after the first contain the edges, values stored as "from to weight"
 	srand(time(NULL));
+	int vertex;
 	for (int i = 0; i < rows; i++) {
 		for (int j = 0; j < columns; j++) {
-			const int vertice = i * columns + j;
+			vertex = i * columns + j;
 			if (j != columns - 1) {
-				fprintf(outputFile, "%d %d %d\n", vertice, vertice + 1,
+				fprintf(outputFile, "%d %d %d\n", vertex, vertex + 1,
 						rand() % MAXIMUM_RANDOM);
 			}
 			if (i != rows - 1) {
-				fprintf(outputFile, "%d %d %d\n", vertice, vertice + columns,
+				fprintf(outputFile, "%d %d %d\n", vertex, vertex + columns,
 						rand() % MAXIMUM_RANDOM);
 			}
 		}
@@ -257,6 +259,36 @@ int createsLoop(const WeightedGraph* graph, int currentEdge, Set* set) {
 }
 
 /*
+ * cleanup adjacency list data
+ */
+void deleteAdjacencyList(AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		free(list->lists[i].elements);
+	}
+	free(list->lists);
+}
+
+/*
+ * only decrease a the weight to a given vertex
+ */
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
+		const int weight) {
+	if (heap->positions[vertex] != -1
+			&& (heap->elements[heap->positions[vertex]].weight > weight)) {
+		heap->elements[heap->positions[vertex]].via = via;
+		heap->elements[heap->positions[vertex]].weight = weight;
+		heapifyBinaryMinHeap(heap, heap->positions[vertex]);
+	}
+}
+
+/*
+ * cleanup heap data
+ */
+void deleteBinaryMinHeap(BinaryMinHeap* heap) {
+	free(heap->elements);
+}
+
+/*
  * cleanup set data
  */
 void deleteSet(Set* set) {
@@ -281,6 +313,50 @@ int findSet(Set* set, int vertex) {
 		set->canonicalElements[vertex] = findSet(set,
 				set->canonicalElements[vertex]);
 		return set->canonicalElements[vertex];
+	}
+}
+
+/*
+ * check and restore heap property from given position upwards
+ */
+void heapifyBinaryMinHeap(BinaryMinHeap* heap, int position) {
+	while (position >= 0) {
+		int positionParent = (position - 1) / 2;
+		if (heap->elements[position].weight
+				< heap->elements[positionParent].weight) {
+			swapHeapElement(heap, position, positionParent);
+			position = positionParent;
+		} else {
+			break;
+		}
+	}
+}
+
+/*
+ * check and restore heap property from given position upwards
+ */
+void heapifyDownBinaryMinHeap(BinaryMinHeap* heap, int position) {
+	while (position < heap->size) {
+		int positionLeft = (position + 1) * 2 - 1;
+		int positionRight = (position + 1) * 2;
+		int positionSmallest = position;
+		if ((positionLeft <= heap->size)
+				&& (heap->elements[positionLeft].weight
+						< heap->elements[positionSmallest].weight)) {
+			positionSmallest = positionLeft;
+		}
+		if ((positionRight <= heap->size)
+				&& (heap->elements[positionRight].weight
+						< heap->elements[positionSmallest].weight)) {
+			positionSmallest = positionRight;
+		}
+		if (heap->elements[position].weight
+				> heap->elements[positionSmallest].weight) {
+			swapHeapElement(heap, position, positionSmallest);
+			position = positionSmallest;
+		} else {
+			break;
+		}
 	}
 }
 
@@ -382,7 +458,7 @@ void merge(int* edgeList, int start, int size, int pivot) {
  */
 void mergeSort(int* edgeList, int start, int size) {
 	if (start == size) {
-// already sorted
+		// already sorted
 		return;
 	}
 
@@ -402,12 +478,55 @@ void mergeSort(int* edgeList, int start, int size) {
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 	printf("DUMMY!\n");
 
+	// create needed data structures
+	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
+			NULL };
+	//AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
+	newSet(set, graph->vertices);
+	//newAdjacencyList(list, graph);
+
+	// clean up
+	deleteSet(set);
+
+	/*		// foreach tree in forest, find closest edge
+	 // if edge weights are equal, ties are broken in favor of first edge
+	 // in G.Edge()
+	 Edge[] closest = new Edge[G.V()];
+	 for (Edge e : G.Edge())
+	 {
+	 int v = e.either(), w = e.other(v);
+	 int i = uf.find(v), j = uf.find(w);
+	 if (i == j)
+	 continue;   // same tree
+	 if (closest[i] == null || less(e, closest[i]))
+	 closest[i] = e;
+	 if (closest[j] == null || less(e, closest[j]))
+	 closest[j] = e;
+	 }
+
+	 // add newly discovered Edge to MST
+	 for (int i = 0; i < G.V(); i++) {
+	 Edge e = closest[i];
+	 if (e != null) {
+	 int v = e.either(), w = e.other(v);
+	 // don't add the same edge twice
+	 if (!uf.connected(v, w)) {
+	 mst.add(e);
+	 weight += e.weight();
+	 uf.union(v, w);
+	 }
+	 }*/
 }
 
 /*
  * find a MST of the graph using Kruskal's algorithm
  */
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
+void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
+	// create needed data structures
+	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
+			NULL };
+	newSet(set, graph->vertices);
+
 	int rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -418,7 +537,7 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
 	if (rank == 0) {
 		printf("Time for sorting: %f s\n", MPI_Wtime() - start);
 
-// add edges to the MST
+		// add edges to the MST
 		int currentEdge = 0;
 		int edgesMST = 0;
 		while (edgesMST < graph->vertices - 1 || currentEdge < graph->edges) {
@@ -439,54 +558,90 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst, Set* set) {
 			currentEdge++;
 		}
 	}
+
+	// clean up
+	deleteSet(set);
 }
 
 /*
- * TODO
- *
  * find a MST of the graph using Prim's algorithm
- *
- G: Graph
- VG: Knotenmenge von G
- w: Gewichtsfunktion für Kantenlänge
- r: Startknoten (r ∈ VG)
- Q: Prioritätswarteschlange
- π[u]: Elternknoten von Knoten u im Spannbaum
- Adj[u]: Adjazenzliste von u (alle Nachbarknoten)
- wert[u]: Abstand von u zum entstehenden Spannbaum
-
- algorithmus_von_prim(G,w,r)
- 01  Q \leftarrow VG   //Initialisierung
- 02  für alle u ∈ Q
- 03      wert[u] \leftarrow ∞
- 04      π[u] \leftarrow 0
- 05  wert[r] \leftarrow 0
- 06  solange Q ≠ \varnothing
- 07      u \leftarrow extract_min(Q)
- 08      für alle v ∈ Adj[u]
- 09          wenn v ∈ Q und w(u,v) < wert[v]
- 10              dann π[v] \leftarrow u
- 11                  wert[v] \leftarrow w(u,v)
  */
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
-	printf("DUMMY!\n");
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	LinkedList* lists[graph->vertices];
-	for (int i = 0; i < graph->vertices; i++) {
-		lists[i] = newNode(i);
-	}
-	for (int i = 0; i < graph->edges; i++) {
-		insertNode(lists[graph->edgeList[i * EDGE_MEMBERS]],
-				graph->edgeList[i * EDGE_MEMBERS + 1]);
-		insertNode(lists[graph->edgeList[i * EDGE_MEMBERS + 1]],
-				graph->edgeList[i * EDGE_MEMBERS]);
-	}
+	if (rank == 0) {
+		// create needed data structures
+		AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
+		newAdjacencyList(list, graph);
+		for (int i = 0; i < graph->edges; i++) {
+			pushAdjacencyList(list, graph->edgeList[i * EDGE_MEMBERS],
+					graph->edgeList[i * EDGE_MEMBERS + 1],
+					graph->edgeList[i * EDGE_MEMBERS + 2]);
+		}
 
-	printf("Adjacency list:\n");
-	for (int i = 0; i < graph->vertices; i++) {
-		printList(lists[i]);
-		printf("\n");
+		BinaryMinHeap* heap = &(BinaryMinHeap ) { .alloced = 0, .size = 0,
+						.elements = NULL };
+		newBinaryMinHeap(heap);
+		heap->positions = (int*) malloc(graph->vertices * sizeof(int));
+		for (int i = 0; i < graph->vertices; i++) {
+			pushBinaryMinHeap(heap, i, INT_MAX, INT_MAX);
+		}
+
+		int vertex;
+		int via;
+		int weight;
+
+		// start at first vertex
+		decreaseBinaryMinHeap(heap, 0, 0, 0);
+		popBinaryMinHeap(heap, &vertex, &via, &weight);
+		for (int i = 0; i < list->lists[vertex].size; i++) {
+			decreaseBinaryMinHeap(heap, list->lists[vertex].elements[i].vertex,
+					vertex, list->lists[vertex].elements[i].weight);
+		}
+
+		for (int i = 0; heap->size > 0; i++) {
+			// add edge from heap to MST
+			popBinaryMinHeap(heap, &vertex, &via, &weight);
+			mst->edgeList[i * EDGE_MEMBERS] = vertex;
+			mst->edgeList[i * EDGE_MEMBERS + 1] = via;
+			mst->edgeList[i * EDGE_MEMBERS + 2] = weight;
+
+			// update heap
+			for (int i = 0; i < list->lists[vertex].size; i++) {
+				decreaseBinaryMinHeap(heap,
+						list->lists[vertex].elements[i].vertex, vertex,
+						list->lists[vertex].elements[i].weight);
+			}
+		}
+
+		// clean up
+		deleteBinaryMinHeap(heap);
+		deleteAdjacencyList(list);
 	}
+}
+
+/*
+ * create adjacency list
+ */
+void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph) {
+	list->elements = graph->vertices;
+	list->lists = (List*) malloc(list->elements * sizeof(List));
+	for (int i = 0; i < list->elements; i++) {
+		list->lists[i].alloced = 1;
+		list->lists[i].size = 0;
+		list->lists[i].elements = (Element*) malloc(sizeof(Element));
+	}
+}
+
+/*
+ * create binary min heap
+ */
+void newBinaryMinHeap(BinaryMinHeap* heap) {
+	heap->alloced = 2;
+	heap->size = 0;
+	heap->positions = (int*) malloc(sizeof(int));
+	heap->elements = (HeapElement*) malloc(2 * sizeof(HeapElement));
 }
 
 /*
@@ -512,6 +667,50 @@ void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges)
 }
 
 /*
+ * remove the minimum of the heap
+ */
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight) {
+	*vertex = heap->elements[0].vertex;
+	*via = heap->elements[0].via;
+	*weight = heap->elements[0].weight;
+	heap->positions[heap->elements[0].vertex] = -1;
+	heap->elements[0] = heap->elements[heap->size - 1];
+	heap->positions[heap->elements[0].vertex] = 0;
+	heap->size--;
+	heapifyDownBinaryMinHeap(heap, 0);
+}
+
+/*
+ * prints the adjacency list
+ */
+void printAdjacencyList(const AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		printf("%d:", i);
+		for (int j = 0; j < list->lists[i].size; j++) {
+			printf(" %d(%d)", list->lists[i].elements[j].vertex,
+					list->lists[i].elements[j].weight);
+		}
+		printf("\n");
+	}
+}
+
+/*
+ * print binary min heap
+ */
+void printBinaryHeap(const BinaryMinHeap* heap) {
+	for (int i = 0; i < heap->size; i++) {
+		printf("[P%d]%d: %d(%d) ", heap->positions[heap->elements[i].vertex],
+				heap->elements[i].vertex, heap->elements[i].via,
+				heap->elements[i].weight);
+		if (log2(i + 2) == (int) log2(i + 2)) {
+			// line break after each stage
+			printf("\n");
+		}
+	}
+	printf("\n");
+}
+
+/*
  * print the graph as a maze to console
  */
 void printMaze(const WeightedGraph* graph, int rows, int columns) {
@@ -532,8 +731,16 @@ void printMaze(const WeightedGraph* graph, int rows, int columns) {
 
 	// each edge is represented as dash or pipe sign
 	for (int i = 0; i < graph->edges; i++) {
-		int from = graph->edgeList[i * EDGE_MEMBERS];
-		int to = graph->edgeList[i * EDGE_MEMBERS + 1];
+		int from;
+		int to;
+		if (graph->edgeList[i * EDGE_MEMBERS]
+				< graph->edgeList[i * EDGE_MEMBERS + 1]) {
+			from = graph->edgeList[i * EDGE_MEMBERS];
+			to = graph->edgeList[i * EDGE_MEMBERS + 1];
+		} else {
+			to = graph->edgeList[i * EDGE_MEMBERS];
+			from = graph->edgeList[i * EDGE_MEMBERS + 1];
+		}
 		int row = from / columns + to / columns;
 		if ((row % 2)) {
 			// edges in even rows are displayed as pipes
@@ -550,6 +757,15 @@ void printMaze(const WeightedGraph* graph, int rows, int columns) {
 			printf("%c", maze[i][j]);
 		}
 		printf("\n");
+	}
+}
+
+/*
+ * print the components of the set
+ */
+void printSet(const Set* set) {
+	for (int i = 0; i < set->elements; i++) {
+		printf("%d: %d(%d)\n", i, set->canonicalElements[i], set->rank[i]);
 	}
 }
 
@@ -647,6 +863,52 @@ Handle processParameters(int argc, char* argv[]) {
 }
 
 /*
+ * add edge to adjacency list
+ */
+void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight) {
+	if (list->lists[from].size == list->lists[from].alloced) {
+		list->lists[from].elements = (Element*) realloc(
+				list->lists[from].elements,
+				2 * list->lists[from].alloced * sizeof(Element));
+		list->lists[from].alloced *= 2;
+	}
+	list->lists[from].elements[list->lists[from].size] = (Element ) { .vertex =
+					to, .weight = weight };
+
+	list->lists[from].size++;
+
+	if (list->lists[to].size == list->lists[to].alloced) {
+		list->lists[to].elements = (Element*) realloc(list->lists[to].elements,
+				2 * list->lists[to].alloced * sizeof(Element));
+		list->lists[to].alloced *= 2;
+	}
+	list->lists[to].elements[list->lists[to].size] = (Element ) {
+					.vertex = from, .weight = weight };
+
+	list->lists[to].size++;
+}
+
+/*
+ * push a new element to the end, then bubble up
+ */
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
+		const int weight) {
+	if (heap->size == heap->alloced) {
+		// double the size if heap is full
+		heap->elements = (HeapElement*) realloc(heap->elements,
+				2 * heap->alloced * sizeof(HeapElement));
+		heap->alloced *= 2;
+	}
+	heap->elements[heap->size] = (HeapElement ) { .vertex = vertex, .via = via,
+					.weight = weight };
+	heap->positions[vertex] = heap->size;
+
+	heapifyBinaryMinHeap(heap, heap->size);
+
+	heap->size++;
+}
+
+/*
  * read a previously generated maze file and store it in the graph
  */
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]) {
@@ -709,14 +971,23 @@ void sort(WeightedGraph* graph) {
 
 	// scatter the edges to sort
 	int elementsPart = (elements + size - 1) / size;
-	int* edgeListPart = (int*) malloc(elementsPart * EDGE_MEMBERS * sizeof(int));
-	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT, edgeListPart,
-			elementsPart * EDGE_MEMBERS,
+	int* edgeListPart = (int*) malloc(
+			elementsPart * EDGE_MEMBERS * sizeof(int));
+	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT,
+			edgeListPart, elementsPart * EDGE_MEMBERS,
 			MPI_INT, 0, MPI_COMM_WORLD);
 
 	if (rank == size - 1 && elements % elementsPart != 0) {
 		// number of elements and processes isn't divisible without remainder
 		elementsPart = elements % elementsPart;
+	}
+
+	if (elements / 2 + 1 < size && elements != size) {
+		if (rank == 0) {
+			printf("Unsupported size/process combination, exiting!\n");
+		}
+		MPI_Finalize();
+		exit(1);
 	}
 
 	// sort the part
@@ -757,6 +1028,19 @@ void sort(WeightedGraph* graph) {
 	} else {
 		free(edgeListPart);
 	}
+}
+
+/*
+ * helper function to swap heap elements
+ */
+void swapHeapElement(BinaryMinHeap* heap, const int position1,
+		const int position2) {
+	heap->positions[heap->elements[position1].vertex] = position2;
+	heap->positions[heap->elements[position2].vertex] = position1;
+
+	HeapElement swap = heap->elements[position1];
+	heap->elements[position1] = heap->elements[position2];
+	heap->elements[position2] = swap;
 }
 
 /*

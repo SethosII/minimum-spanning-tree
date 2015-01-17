@@ -1,9 +1,0 @@
-content_assist_category_order=org.eclipse.cdt.ui.templateProposalCategory\:0\u0000org.eclipse.cdt.ui.parserProposalCategory\:1\u0000org.eclipse.cdt.ui.helpProposalCategory\:2\u0000org.eclipse.cdt.ui.textProposalCategory\:65538\u0000
-content_assist_disabled_computers=org.eclipse.cdt.ui.textProposalCategory\u0000
-content_assist_proposals_timeout=5000
-eclipse.preferences.version=1
-org.eclipse.cdt.ui.text.templates.custom=<?xml version\="1.0" encoding\="UTF-8" standalone\="no"?><templates><template autoinsert\="true" context\="org.eclipse.cdt.ui.text.templates.c" deleted\="false" description\="for loop" enabled\="true" id\="org.eclipse.cdt.ui.text.templates.c.for" name\="for">for (${var} \= 0; ${var} &lt; ${max}; ${var}++) {\n\t${line_selection}${cursor}\n}</template><template autoinsert\="true" context\="org.eclipse.cdt.ui.text.templates.c" deleted\="false" description\="for loop with temporary variable" enabled\="true" id\="org.eclipse.cdt.ui.text.templates.cpp.for" name\="for">for (int ${var} \= 0; ${var} &lt; ${max}; ${var}++) {\n\t${line_selection}${cursor}\n}</template></templates>
-sourceHoverBackgroundColor=251,234,160
-spelling_locale_initialized=true
-useAnnotationsPrefPage=true
-useQuickDiffPrefPage=true

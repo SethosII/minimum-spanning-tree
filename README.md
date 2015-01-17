@@ -18,18 +18,19 @@ A spanning tree can be used for various application:
 Status
 ------
 
-At the moment only Kruskal's algorithm is implemented.
+At the moment Kruskal's and Prim's algorithms are implemented.
 
 Output
 ------
 
-To test the program the maze generation was choosen. The program generates a 2D grid graph with random edge weights. The resulting maze can be printed to the console. A `+` represents a vertex and `-`,`|` represent an edge between two vertices.
+To test the program the maze generation was choosen. The program generates a 2D grid graph with random edge weights. The resulting maze can be printed to the console by passing the argument `-m` to the program. A `+` represents a vertex and `-`,`|` represent an edge between two vertices.
 
 Example output (`mpirun -np 1 ./MST -c 12 -r 8 -a 0 -n -m`):
 ```
 Starting
 Time for sorting: 0.000020 s
 Time elapsed: 0.000037 s
+MST weight: 481
 Maze:
 +-+-+-+ +-+ +-+-+ +-+ +
 | |     | |     | |   |
@@ -68,3 +69,7 @@ Implementation overview
 Kruskal's algorithm:
 * sorting edges via parallelized mergesort
 * track components via union-find data structure with union by rank and path compression
+
+Prim's algorithm:
+* store neighbors in adjacency list
+* track vertices in binary heap
