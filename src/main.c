@@ -188,7 +188,7 @@ int main(int argc, char* argv[]) {
 
 	MPI_Finalize();
 
-	exit(0);
+	return 0;
 }
 
 /*
@@ -607,9 +607,7 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	}
 	printBinaryHeap(heap);
 
-
 	decreaseBinaryMinHeap(heap, 0, 0, 0);
-
 
 	deleteBinaryMinHeap(heap);
 	deleteAdjacencyList(list);
@@ -864,8 +862,8 @@ void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight) {
 				2 * list->lists[to].alloced * sizeof(Element));
 		list->lists[to].alloced *= 2;
 	}
-	list->lists[to].elements[list->lists[to].size] = (Element ) { .vertex =
-					from, .weight = weight };
+	list->lists[to].elements[list->lists[to].size] = (Element ) {
+					.vertex = from, .weight = weight };
 
 	list->lists[to].size++;
 }
@@ -881,8 +879,8 @@ void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
 				2 * heap->alloced * sizeof(HeapElement));
 		heap->alloced *= 2;
 	}
-	heap->elements[heap->size] = (HeapElement ) { .vertex = vertice,
-					.via = via, .weight = weight };
+	heap->elements[heap->size] = (HeapElement ) { .vertex = vertice, .via = via,
+					.weight = weight };
 
 	heapifyBinaryMinHeap(heap, heap->size);
 
@@ -961,6 +959,14 @@ void sort(WeightedGraph* graph) {
 	if (rank == size - 1 && elements % elementsPart != 0) {
 		// number of elements and processes isn't divisible without remainder
 		elementsPart = elements % elementsPart;
+	}
+
+	if (elements / 2 + 1 < size && elements != size) {
+		if (rank == 0) {
+			printf("Unsupported size/process combination, exiting!\n");
+		}
+		MPI_Finalize();
+		exit(1);
 	}
 
 	// sort the part
