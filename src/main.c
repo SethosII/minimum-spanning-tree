@@ -65,7 +65,7 @@ typedef struct {
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 int createsLoop(const WeightedGraph* graph, int currentedge, Set* set);
-void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertice,
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertex,
 		const int via, const int weight);
 void deleteAdjacencyList(AdjacencyList* list);
 void deleteBinaryMinHeap(BinaryMinHeap* heap);
@@ -83,7 +83,7 @@ void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph);
 void newBinaryMinHeap(BinaryMinHeap* heap);
 void newSet(Set* set, const int elements);
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges);
-void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* via, int* weight);
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight);
 void printAdjacencyList(const AdjacencyList* list);
 void printBinaryHeap(const BinaryMinHeap* heap);
 void printMaze(const WeightedGraph* graph, int rows, int columns);
@@ -91,7 +91,7 @@ void printSet(const Set* set);
 void printWeightedGraph(const WeightedGraph* graph);
 Handle processParameters(int argc, char* argv[]);
 void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight);
-void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
 		const int weight);
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
@@ -264,10 +264,10 @@ void deleteAdjacencyList(AdjacencyList* list) {
 /*
  * only decrease a the weight to a given vertex
  */
-void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertice,
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertex,
 		const int via, const int weight) {
 	for (int i = 0; i < heap->size; i++) {
-		if ((heap->elements[i].vertex == vertice)
+		if ((heap->elements[i].vertex == vertex)
 				&& (weight < heap->elements[i].weight)) {
 			heap->elements[i].via = via;
 			heap->elements[i].weight = weight;
@@ -563,28 +563,6 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
  * TODO
  *
  * find a MST of the graph using Prim's algorithm
- *
- G: Graph
- VG: Knotenmenge von G
- w: Gewichtsfunktion für Kantenlänge
- r: Startknoten (r ∈ VG)
- Q: Prioritätswarteschlange
- π[u]: Elternknoten von Knoten u im Spannbaum
- Adj[u]: Adjazenzliste von u (alle Nachbarknoten)
- wert[u]: Abstand von u zum entstehenden Spannbaum
-
- algorithmus_von_prim(G,w,r)
- 01  Q \leftarrow VG   //Initialisierung
- 02  für alle u ∈ Q
- 03      wert[u] \leftarrow ∞
- 04      π[u] \leftarrow 0
- 05  wert[r] \leftarrow 0
- 06  solange Q ≠ \varnothing
- 07      u \leftarrow extract_min(Q)
- 08      für alle v ∈ Adj[u]
- 09          wenn v ∈ Q und w(u,v) < wert[v]
- 10              dann π[v] \leftarrow u
- 11                  wert[v] \leftarrow w(u,v)
  */
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	printf("DUMMY!\n");
@@ -597,7 +575,6 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 				graph->edgeList[i * EDGE_MEMBERS + 1],
 				graph->edgeList[i * EDGE_MEMBERS + 2]);
 	}
-	printAdjacencyList(list);
 
 	BinaryMinHeap* heap = &(BinaryMinHeap ) { .alloced = 0, .size = 0,
 					.elements = NULL };
@@ -605,9 +582,31 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	for (int i = 0; i < graph->vertices; i++) {
 		pushBinaryMinHeap(heap, i, INT_MAX, INT_MAX);
 	}
-	printBinaryHeap(heap);
 
+	int vertex;
+	int via;
+	int weight;
+	int i = 0;
+
+	// start at first vertex
 	decreaseBinaryMinHeap(heap, 0, 0, 0);
+	popBinaryMinHeap(heap, &vertex, &via, &weight);
+	for (int i = 0; i < list->lists[vertex].size; i++) {
+		decreaseBinaryMinHeap(heap, list->lists[vertex].elements[i].vertex,
+				vertex, list->lists[vertex].elements[i].weight);
+	}
+
+	while (heap->size > 0) {
+		popBinaryMinHeap(heap, &vertex, &via, &weight);
+		mst->edgeList[i * EDGE_MEMBERS] = vertex;
+		mst->edgeList[i * EDGE_MEMBERS + 1] = via;
+		mst->edgeList[i * EDGE_MEMBERS + 2] = weight;
+		for (int i = 0; i < list->lists[vertex].size; i++) {
+			decreaseBinaryMinHeap(heap, list->lists[vertex].elements[i].vertex,
+					vertex, list->lists[vertex].elements[i].weight);
+		}
+		i++;
+	}
 
 	deleteBinaryMinHeap(heap);
 	deleteAdjacencyList(list);
@@ -719,8 +718,16 @@ void printMaze(const WeightedGraph* graph, int rows, int columns) {
 
 	// each edge is represented as dash or pipe sign
 	for (int i = 0; i < graph->edges; i++) {
-		int from = graph->edgeList[i * EDGE_MEMBERS];
-		int to = graph->edgeList[i * EDGE_MEMBERS + 1];
+		int from;
+		int to;
+		if (graph->edgeList[i * EDGE_MEMBERS]
+				< graph->edgeList[i * EDGE_MEMBERS + 1]) {
+			from = graph->edgeList[i * EDGE_MEMBERS];
+			to = graph->edgeList[i * EDGE_MEMBERS + 1];
+		} else {
+			to = graph->edgeList[i * EDGE_MEMBERS];
+			from = graph->edgeList[i * EDGE_MEMBERS + 1];
+		}
 		int row = from / columns + to / columns;
 		if ((row % 2)) {
 			// edges in even rows are displayed as pipes
@@ -871,7 +878,7 @@ void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight) {
 /*
  * push a new element to the end, then bubble up
  */
-void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
 		const int weight) {
 	if (heap->size == heap->alloced) {
 		// double the size if heap is full
@@ -879,7 +886,7 @@ void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
 				2 * heap->alloced * sizeof(HeapElement));
 		heap->alloced *= 2;
 	}
-	heap->elements[heap->size] = (HeapElement ) { .vertex = vertice, .via = via,
+	heap->elements[heap->size] = (HeapElement ) { .vertex = vertex, .via = via,
 					.weight = weight };
 
 	heapifyBinaryMinHeap(heap, heap->size);
