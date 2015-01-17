@@ -22,15 +22,20 @@ typedef struct {
 	int verbose;
 } Handle;
 
-typedef struct Node {
-	int to;
+typedef struct {
+	int vertex;
 	int weight;
-	struct Node* next;
-} LinkedList;
+} Element;
+
+typedef struct {
+	int alloced;
+	int size;
+	Element* elements;
+} List;
 
 typedef struct {
 	int elements;
-	LinkedList** lists;
+	List* lists;
 } AdjacencyList;
 
 typedef struct {
@@ -46,7 +51,8 @@ typedef struct {
 } WeightedGraph;
 
 typedef struct {
-	int vertice;
+	int vertex;
+	int via;
 	int weight;
 } HeapElement;
 
@@ -59,17 +65,15 @@ typedef struct {
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 int createsLoop(const WeightedGraph* graph, int currentedge, Set* set);
-void decreaseBinaryMinHeap(BinaryMinHeap* heap, int vertice, int weight);
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertice,
+		const int via, const int weight);
 void deleteAdjacencyList(AdjacencyList* list);
 void deleteBinaryMinHeap(BinaryMinHeap* heap);
 void deleteSet(Set* set);
 void deleteWeightedGraph(WeightedGraph* graph);
 int findSet(Set* set, int vertex);
-void getNeighbors(const LinkedList* list, int* neighbors, const int vertex,
-		const int step);
 void heapifyBinaryMinHeap(BinaryMinHeap* heap, int position);
 void heapifyDownBinaryMinHeap(BinaryMinHeap* heap, int position);
-int insertNode(LinkedList* list, int to, int weight);
 void merge(int* edgeList, int start, int size, int pivot);
 void mergeSort(int* edgeList, int start2, int size2);
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst);
@@ -77,18 +81,18 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst);
 void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst);
 void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph);
 void newBinaryMinHeap(BinaryMinHeap* heap);
-LinkedList* newNode(int to, int weight);
 void newSet(Set* set, const int elements);
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges);
-void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* weight);
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* via, int* weight);
 void printAdjacencyList(const AdjacencyList* list);
 void printBinaryHeap(const BinaryMinHeap* heap);
-void printLinkedList(LinkedList* list);
 void printMaze(const WeightedGraph* graph, int rows, int columns);
 void printSet(const Set* set);
 void printWeightedGraph(const WeightedGraph* graph);
 Handle processParameters(int argc, char* argv[]);
-void pushBinaryMinHeap(BinaryMinHeap* heap, int vertice, int weight);
+void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight);
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
+		const int weight);
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
 void swapHeapElement(BinaryMinHeap* heap, int position1, int position2);
@@ -248,27 +252,29 @@ int createsLoop(const WeightedGraph* graph, int currentEdge, Set* set) {
 }
 
 /*
+ * cleanup adjacency list data
+ */
+void deleteAdjacencyList(AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		free(list->lists[i].elements);
+	}
+	free(list->lists);
+}
+
+/*
  * only decrease a the weight to a given vertex
  */
-void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int weight) {
+void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertice,
+		const int via, const int weight) {
 	for (int i = 0; i < heap->size; i++) {
-		if ((heap->elements[i].vertice == vertice)
+		if ((heap->elements[i].vertex == vertice)
 				&& (weight < heap->elements[i].weight)) {
+			heap->elements[i].via = via;
 			heap->elements[i].weight = weight;
 			heapifyBinaryMinHeap(heap, i);
 			break;
 		}
 	}
-}
-
-/*
- * cleanup adjacency list data
- */
-void deleteAdjacencyList(AdjacencyList* list) {
-	for (int i = 0; i < list->elements; i++) {
-		free(list->lists[i]);
-	}
-	free(list->lists);
 }
 
 /*
@@ -304,18 +310,6 @@ int findSet(Set* set, int vertex) {
 				set->canonicalElements[vertex]);
 		return set->canonicalElements[vertex];
 	}
-}
-
-/*
- * get neighbors to specified vertex
- */
-void getNeighbors(const LinkedList* list, int* neighbors, const int vertex,
-		const int step) {
-	if (list->next != NULL) {
-		getNeighbors(list->next, neighbors, vertex, step + 2);
-	}
-	neighbors[step] = list->to;
-	neighbors[step + 1] = list->weight;
 }
 
 /*
@@ -360,23 +354,6 @@ void heapifyDownBinaryMinHeap(BinaryMinHeap* heap, int position) {
 			break;
 		}
 	}
-}
-
-/*
- * insert node at the end, if not existent
- */
-int insertNode(LinkedList* list, int to, int weight) {
-	int inserted = 0;
-	if (list->to != to) {
-		if (list->next == NULL) {
-			LinkedList* new = newNode(to, weight);
-			list->next = new;
-			inserted = 1;
-		} else {
-			inserted = insertNode(list->next, to, weight);
-		}
-	}
-	return inserted;
 }
 
 /*
@@ -500,20 +477,12 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 	// create needed data structures
 	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
 			NULL };
-	AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
+	//AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
 	newSet(set, graph->vertices);
-	newAdjacencyList(list, graph);
-	int* neighbors[list->elements];
-	for (int i = 0; i < graph->vertices; i++) {
-		neighbors[i] = (int*) malloc(2 * list->lists[i]->to * sizeof(int));
-		getNeighbors(list->lists[i]->next, neighbors[i], i, 0);
-	}
+	//newAdjacencyList(list, graph);
 
 	// clean up
 	deleteSet(set);
-	for (int i = 0; i < list->elements; i++) {
-		free(neighbors[i]);
-	}
 
 	/*		// foreach tree in forest, find closest edge
 	 // if edge weights are equal, ties are broken in favor of first edge
@@ -623,26 +592,24 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
 	// create needed data structures
 	AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
 	newAdjacencyList(list, graph);
-
-	//printAdjacencyList(list);
+	for (int i = 0; i < graph->edges; i++) {
+		pushAdjacencyList(list, graph->edgeList[i * EDGE_MEMBERS],
+				graph->edgeList[i * EDGE_MEMBERS + 1],
+				graph->edgeList[i * EDGE_MEMBERS + 2]);
+	}
+	printAdjacencyList(list);
 
 	BinaryMinHeap* heap = &(BinaryMinHeap ) { .alloced = 0, .size = 0,
 					.elements = NULL };
 	newBinaryMinHeap(heap);
-
-	for (int i = 20; i >= 1; i--) {
-		pushBinaryMinHeap(heap, i, i);
+	for (int i = 0; i < graph->vertices; i++) {
+		pushBinaryMinHeap(heap, i, INT_MAX, INT_MAX);
 	}
 	printBinaryHeap(heap);
 
-	decreaseBinaryMinHeap(heap, 7, 0);
-	printBinaryHeap(heap);
 
-	int vertice = 0;
-	int weight = 0;
-	popBinaryMinHeap(heap, &vertice, &weight);
-	printBinaryHeap(heap);
-	printf("%d %d\n", vertice, weight);
+	decreaseBinaryMinHeap(heap, 0, 0, 0);
+
 
 	deleteBinaryMinHeap(heap);
 	deleteAdjacencyList(list);
@@ -653,28 +620,11 @@ void mstPrim(const WeightedGraph* graph, const WeightedGraph* mst) {
  */
 void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph) {
 	list->elements = graph->vertices;
-	list->lists = (LinkedList**) malloc(graph->vertices * sizeof(LinkedList));
-	int inserts[graph->vertices];
-	for (int i = 0; i < graph->vertices; i++) {
-		inserts[i] = 0;
-	}
-	for (int i = 0; i < graph->vertices; i++) {
-		list->lists[i] = newNode(i, 0);
-	}
-	for (int i = 0; i < graph->edges; i++) {
-		if (insertNode(list->lists[graph->edgeList[i * EDGE_MEMBERS]],
-				graph->edgeList[i * EDGE_MEMBERS + 1],
-				graph->edgeList[i * EDGE_MEMBERS + 2])) {
-			inserts[graph->edgeList[i * EDGE_MEMBERS]]++;
-		}
-		if (insertNode(list->lists[graph->edgeList[i * EDGE_MEMBERS + 1]],
-				graph->edgeList[i * EDGE_MEMBERS],
-				graph->edgeList[i * EDGE_MEMBERS + 2])) {
-			inserts[graph->edgeList[i * EDGE_MEMBERS + 1]]++;
-		}
-	}
-	for (int i = 0; i < graph->vertices; i++) {
-		list->lists[i]->to = inserts[i];
+	list->lists = (List*) malloc(list->elements * sizeof(List));
+	for (int i = 0; i < list->elements; i++) {
+		list->lists[i].alloced = 1;
+		list->lists[i].size = 0;
+		list->lists[i].elements = (Element*) malloc(sizeof(Element));
 	}
 }
 
@@ -685,17 +635,6 @@ void newBinaryMinHeap(BinaryMinHeap* heap) {
 	heap->alloced = 2;
 	heap->size = 0;
 	heap->elements = (HeapElement*) malloc(2 * sizeof(HeapElement));
-}
-
-/*
- * create new node
- */
-LinkedList* newNode(int to, int weight) {
-	LinkedList* node = malloc(sizeof(LinkedList));
-	node->to = to;
-	node->weight = weight;
-	node->next = NULL;
-	return node;
 }
 
 /*
@@ -723,8 +662,9 @@ void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges)
 /*
  * remove the minimum of the heap
  */
-void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* weight) {
-	*vertice = heap->elements[0].vertice;
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight) {
+	*vertex = heap->elements[0].vertex;
+	*via = heap->elements[0].via;
 	*weight = heap->elements[0].weight;
 	heap->elements[0] = heap->elements[heap->size - 1];
 	heap->size--;
@@ -736,7 +676,11 @@ void popBinaryMinHeap(BinaryMinHeap* heap, int* vertice, int* weight) {
  */
 void printAdjacencyList(const AdjacencyList* list) {
 	for (int i = 0; i < list->elements; i++) {
-		printLinkedList(list->lists[i]);
+		printf("%d:", i);
+		for (int j = 0; j < list->lists[i].size; j++) {
+			printf(" %d(%d)", list->lists[i].elements[j].vertex,
+					list->lists[i].elements[j].weight);
+		}
 		printf("\n");
 	}
 }
@@ -746,23 +690,14 @@ void printAdjacencyList(const AdjacencyList* list) {
  */
 void printBinaryHeap(const BinaryMinHeap* heap) {
 	for (int i = 0; i < heap->size; i++) {
-		printf("%d(%d) ", heap->elements[i].vertice, heap->elements[i].weight);
+		printf("%d: %d(%d) ", heap->elements[i].vertex, heap->elements[i].via,
+				heap->elements[i].weight);
 		if (log2(i + 2) == (int) log2(i + 2)) {
 			// line break after each stage
 			printf("\n");
 		}
 	}
 	printf("\n");
-}
-
-/*
- * print the data of a linked list
- */
-void printLinkedList(LinkedList* list) {
-	printf("%d(%d) ", list->to, list->weight);
-	if (list->next != NULL) {
-		printLinkedList(list->next);
-	}
 }
 
 /*
@@ -910,19 +845,45 @@ Handle processParameters(int argc, char* argv[]) {
 }
 
 /*
+ * add edge to adjacency list
+ */
+void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight) {
+	if (list->lists[from].size == list->lists[from].alloced) {
+		list->lists[from].elements = (Element*) realloc(
+				list->lists[from].elements,
+				2 * list->lists[from].alloced * sizeof(Element));
+		list->lists[from].alloced *= 2;
+	}
+	list->lists[from].elements[list->lists[from].size] = (Element ) { .vertex =
+					to, .weight = weight };
+
+	list->lists[from].size++;
+
+	if (list->lists[to].size == list->lists[to].alloced) {
+		list->lists[to].elements = (Element*) realloc(list->lists[to].elements,
+				2 * list->lists[to].alloced * sizeof(Element));
+		list->lists[to].alloced *= 2;
+	}
+	list->lists[to].elements[list->lists[to].size] = (Element ) { .vertex =
+					from, .weight = weight };
+
+	list->lists[to].size++;
+}
+
+/*
  * push a new element to the end, then bubble up
  */
-void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int weight) {
-	if (heap->size == (heap->alloced - 1)) {
+void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertice, const int via,
+		const int weight) {
+	if (heap->size == heap->alloced) {
 		// double the size if heap is full
 		heap->elements = (HeapElement*) realloc(heap->elements,
 				2 * heap->alloced * sizeof(HeapElement));
 		heap->alloced *= 2;
 	}
-	heap->elements[heap->size] = (HeapElement ) { .vertice = vertice, .weight =
-					weight };
+	heap->elements[heap->size] = (HeapElement ) { .vertex = vertice,
+					.via = via, .weight = weight };
 
-	// heapify
 	heapifyBinaryMinHeap(heap, heap->size);
 
 	heap->size++;
@@ -1045,7 +1006,8 @@ void sort(WeightedGraph* graph) {
 /*
  * helper function to swap heap elements
  */
-void swapHeapElement(BinaryMinHeap* heap, const int position1, const int position2) {
+void swapHeapElement(BinaryMinHeap* heap, const int position1,
+		const int position2) {
 	HeapElement swap = heap->elements[position1];
 	heap->elements[position1] = heap->elements[position2];
 	heap->elements[position2] = swap;
