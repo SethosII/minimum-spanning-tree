@@ -81,7 +81,7 @@ typedef struct FibonacciMinHeap {
 	FibonacciHeapElement* minimum;
 } FibonacciMinHeap;
 
-void consolidateHeap(FibonacciMinHeap* heap);
+void consolidateFibonacciMinHeap(FibonacciMinHeap* heap);
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 int createsLoop(const WeightedGraph* graph, int currentedge, Set* set);
@@ -111,10 +111,10 @@ void newBinaryMinHeap(BinaryMinHeap* heap);
 void newFibonacciMinHeap(FibonacciMinHeap* heap);
 void newSet(Set* set, const int elements);
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges);
-void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight);
 void newFibonacciHeapElement(FibonacciHeapElement* element, int vertex, int via,
 		int weight, FibonacciHeapElement* left, FibonacciHeapElement* right,
 		FibonacciHeapElement* parent, FibonacciHeapElement* child);
+void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight);
 void popFibonacciMinHeap(FibonacciMinHeap* heap, int* vertex, int* via,
 		int* weight);
 void printAdjacencyList(const AdjacencyList* list);
@@ -133,9 +133,6 @@ void pushFibonacciMinHeap(FibonacciMinHeap* heap, const int vertex,
 void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
 void swapBinaryHeapElement(BinaryMinHeap* heap, int position1, int position2);
-FibonacciHeapElement* updateDegreeFibonacciMinHeap(
-		FibonacciHeapElement** degree, FibonacciHeapElement* parent,
-		FibonacciHeapElement* child);
 void unionSet(Set* set, const int parent1, const int parent2);
 
 /*
@@ -241,10 +238,9 @@ int main(int argc, char* argv[]) {
 }
 
 /*
- * TODO check
  * rearrange fibonacci heap and update minimum
  */
-void consolidateHeap(FibonacciMinHeap* heap) {
+void consolidateFibonacciMinHeap(FibonacciMinHeap* heap) {
 	// initialize degree array
 	int degreeSize = 2 * log2(heap->size) + 1;
 	FibonacciHeapElement** degree = (FibonacciHeapElement**) malloc(
@@ -253,50 +249,70 @@ void consolidateHeap(FibonacciMinHeap* heap) {
 		degree[i] = NULL;
 	}
 
-	// link trees with same degree together
-	FibonacciHeapElement* startElement = heap->minimum;
-	FibonacciHeapElement* currentElement = startElement;
-	int currentDegree = 0;
+	// add roots to degree array
+	FibonacciHeapElement* element = heap->minimum;
+	FibonacciHeapElement* nextElement = NULL;
 	do {
-		currentDegree = currentElement->childrens;
-		if (degree[currentDegree] == NULL) {
-			degree[currentDegree] = currentElement;
+		if (element == element->right) {
+			nextElement = NULL;
 		} else {
-			if (degree[currentDegree]->weight > currentElement->weight) {
-				// insert degree[currentDegree] under currentElement
-				currentElement = updateDegreeFibonacciMinHeap(degree,
-						currentElement, degree[currentDegree]);
-			} else {
-				// insert currentElement under degree[currentDegree]
-				currentElement = updateDegreeFibonacciMinHeap(degree,
-						degree[currentDegree], currentElement);
+			nextElement = element->right;
+		}
+		element->right->left = element->left;
+		element->left->right = element->right;
+		element->right = element;
+		element->left = element;
+		int currentDegree = element->childrens;
+		while (degree[currentDegree] != NULL) {
+			if (element->weight > degree[currentDegree]->weight) {
+				FibonacciHeapElement* tmp = element;
+				element = degree[currentDegree];
+				degree[currentDegree] = tmp;
 			}
-		}
-		currentElement = currentElement->right;
-		for (int i = 0; i < degreeSize; i++) {
-			printf("%p ", degree[i]);
-		}
-		printf("\n");
-	} while (currentElement != startElement);
 
-	for (int i = 0; i < degreeSize; i++) {
-		printf("%p ", degree[i]);
-	}
-	printf("\n");
+			// degree[currentDegree] becomes child of element
+			if (element->child == NULL) {
+				element->child = degree[currentDegree];
+				degree[currentDegree]->parent = element;
+			} else {
+				degree[currentDegree]->parent = element;
+				degree[currentDegree]->right = element->child;
+				degree[currentDegree]->left = element->child->left;
+				degree[currentDegree]->right->left = degree[currentDegree];
+				degree[currentDegree]->left->right = degree[currentDegree];
+			}
+			element->childrens++;
+			degree[currentDegree]->marked = 0;
+			degree[currentDegree] = NULL;
+			currentDegree++;
+		}
+		degree[currentDegree] = element;
+
+		element = nextElement;
+	} while (element != NULL);
 
 	// update minimum
 	heap->minimum = NULL;
 	for (int i = 0; i < degreeSize; i++) {
 		if (degree[i] != NULL) {
 			if (heap->minimum == NULL) {
+				// heap empty
 				heap->minimum = degree[i];
+				degree[i]->right = degree[i];
+				degree[i]->left = degree[i];
 			} else {
+				degree[i]->right = heap->minimum;
+				degree[i]->left = heap->minimum->left;
+				heap->minimum->left->right = degree[i];
+				heap->minimum->left = degree[i];
 				if (degree[i]->weight < heap->minimum->weight) {
+					// less weight then current minimum
 					heap->minimum = degree[i];
 				}
 			}
 		}
 	}
+
 	free(degree);
 }
 
@@ -671,6 +687,44 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 	newSet(set, graph->vertices);
 	//newAdjacencyList(list, graph);
 
+	/*Edge z = new Edge(0, 0, maxWT);
+	 a = GraphUtilities.edges(G);
+	 b = new Edge[G.V()];
+	 mst = new Edge[G.V()+1];
+	 int N = 1;
+	 int k = 1;
+	 for (int E = graph->edges; E != 0; E = N) {
+	 for (int t = 0; t < graph->vertices; t++) {
+	 b[t] = z;
+	 }
+	 for (int h = 0, N = 0; h < E; h++){
+	 Edge e = a[h];
+	 int i = findSet(set, e.v());
+	 int j = findSet(set, e.w());
+	 if (i == j) {
+	 continue;
+	 }
+	 if (e.wt() < b[i].wt()) {
+	 b[i] = e;
+	 }
+	 if (e.wt() < b[j].wt()) {
+	 b[j] = e;
+	 }
+	 a[N++] = e;
+	 }
+	 for (int h = 0; h < G.V(); h++) {
+	 if (b[h] != z) {
+	 int i = b[h].v();
+	 int j = b[h].w();
+	 if (!uf.find(i, j)) {
+	 unionSet(set, i, j);
+	 mst[k] = b[h];
+	 k++;
+	 }
+	 }
+	 }
+	 }*/
+
 	// clean up
 	deleteSet(set);
 
@@ -701,7 +755,36 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 	 weight += e.weight();
 	 uf.union(v, w);
 	 }
-	 }*/
+	 }
+
+	 class GraphMST
+	 { private UF uf;
+	 private Edge[] a, b, mst;
+	 GraphMST(Graph G)
+	 { Edge z = new Edge(0, 0, maxWT);
+	 uf = new UF(G.V());
+	 a = GraphUtilities.edges(G);
+	 b = new Edge[G.V()]; mst = new Edge[G.V()+1];
+	 int N, k = 1;
+	 for (int E = G.E(); E != 0; E = N)
+	 { int h, i, j;
+	 for (int t = 0; t < G.V(); t++) b[t] = z;
+	 for (h = 0, N = 0; h < E; h++)
+	 { Edge e = a[h];
+	 i = uf.find(e.v()); j = uf.find(e.w());
+	 if (i == j) continue;
+	 if (e.wt() < b[i].wt()) b[i] = e;
+	 if (e.wt() < b[j].wt()) b[j] = e;
+	 a[N++] = e;
+	 }
+	 for (h = 0; h < G.V(); h++)
+	 if (b[h] != z)
+	 if (!uf.find(i = b[h].v(), j = b[h].w()))
+	 { uf.unite(i, j); mst[k++] = b[h]; }
+	 }
+	 }
+	 }
+	 */
 }
 
 /*
@@ -806,7 +889,6 @@ void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst) {
 }
 
 /*
- * TODO
  * find a MST of the graph using Prim's algorithm with a fibonacci heap
  */
 void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
@@ -814,38 +896,7 @@ void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 	if (rank == 0) {
-//		FibonacciMinHeap* heap = &(FibonacciMinHeap ) { .size = 0, .minimum =
-//				NULL, .positions = NULL };
-//		newFibonacciMinHeap(heap);
-//		int size = 6;
-//		int decrease = 4;
-//		heap->positions = (FibonacciHeapElement**) realloc(heap->positions,
-//				size * sizeof(FibonacciHeapElement*));
-//		int vertex = -1;
-//		int via = -1;
-//		int weight = -1;
-//
-//		for (int i = 0; i < size; i++) {
-//			pushFibonacciMinHeap(heap, i, i, i);
-//		}
-//		printFibonacciHeap(heap, heap->minimum);
-//
-//		popFibonacciMinHeap(heap, &vertex, &via, &weight);
-//		printf("popped: %d|%d|%d\n", vertex, via, weight);
-//		printFibonacciHeap(heap, heap->minimum);
-//
-//		heap->minimum->child->marked = 1;
-//
-//		decreaseFibonacciMinHeap(heap, decrease, 0, 0);
-//		printf("decreased %d\n", decrease);
-//		printFibonacciHeap(heap, heap->minimum);
-//		for (int i = 0; i < size - 1; i++) {
-//			popFibonacciMinHeap(heap, &vertex, &via, &weight);
-//			printf("popped: %d|%d|%d\n", vertex, via, weight);
-//			printFibonacciHeap(heap, heap->minimum);
-//		}
-
-// create needed data structures
+		// create needed data structures
 		AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
 		newAdjacencyList(list, graph);
 		for (int i = 0; i < graph->edges; i++) {
@@ -854,53 +905,47 @@ void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
 					graph->edgeList[i * EDGE_MEMBERS + 2]);
 		}
 
-		FibonacciMinHeap* fheap = &(FibonacciMinHeap ) { .size = 0, .minimum =
+		FibonacciMinHeap* heap = &(FibonacciMinHeap ) { .size = 0, .minimum =
 				NULL, .positions = NULL };
-		newFibonacciMinHeap(fheap);
-		fheap->positions = (FibonacciHeapElement**) realloc(fheap->positions,
+		newFibonacciMinHeap(heap);
+		heap->positions = (FibonacciHeapElement**) realloc(heap->positions,
 				graph->vertices * sizeof(FibonacciHeapElement*));
 		for (int i = 0; i < graph->vertices; i++) {
-			pushFibonacciMinHeap(fheap, i, INT_MAX, INT_MAX);
+			pushFibonacciMinHeap(heap, i, INT_MAX, INT_MAX);
 		}
-		printFibonacciHeap(fheap, fheap->minimum);
+		//printFibonacciHeap(fheap, fheap->minimum);
 
 		int vertex;
 		int via;
 		int weight;
 
 		// start at first vertex
-		decreaseFibonacciMinHeap(fheap, 0, 0, 0);
-		printFibonacciHeap(fheap, fheap->minimum);
-		popFibonacciMinHeap(fheap, &vertex, &via, &weight);
+		decreaseFibonacciMinHeap(heap, 0, 0, 0);
+
+		popFibonacciMinHeap(heap, &vertex, &via, &weight);
 		for (int i = 0; i < list->lists[vertex].size; i++) {
-			decreaseFibonacciMinHeap(fheap,
+			decreaseFibonacciMinHeap(heap,
 					list->lists[vertex].elements[i].vertex, vertex,
 					list->lists[vertex].elements[i].weight);
 		}
 
-		for (int i = 0; fheap->size > 0; i++) {
-			// add edge from fheap to MST
-			printf("vor pop %d\n", vertex);
-			printFibonacciHeap(fheap, fheap->minimum);
-			popFibonacciMinHeap(fheap, &vertex, &via, &weight);
-			printf("nach pop %d\n", vertex);
-			printFibonacciHeap(fheap, fheap->minimum);
+		for (int i = 0; heap->size > 0; i++) {
+			// add edge from heap to MST
+			popFibonacciMinHeap(heap, &vertex, &via, &weight);
 			mst->edgeList[i * EDGE_MEMBERS] = vertex;
 			mst->edgeList[i * EDGE_MEMBERS + 1] = via;
 			mst->edgeList[i * EDGE_MEMBERS + 2] = weight;
 
-			// update fheap
+			// update heap
 			for (int i = 0; i < list->lists[vertex].size; i++) {
-				decreaseFibonacciMinHeap(fheap,
+				decreaseFibonacciMinHeap(heap,
 						list->lists[vertex].elements[i].vertex, vertex,
 						list->lists[vertex].elements[i].weight);
 			}
-			printf("decreased %d\n", vertex);
-			printFibonacciHeap(fheap, fheap->minimum);
 		}
 
 		// clean up
-		deleteFibonacciMinHeap(fheap);
+		deleteFibonacciMinHeap(heap);
 		deleteAdjacencyList(list);
 	}
 }
@@ -995,48 +1040,43 @@ void popBinaryMinHeap(BinaryMinHeap* heap, int* vertex, int* via, int* weight) {
  */
 void popFibonacciMinHeap(FibonacciMinHeap* heap, int* vertex, int* via,
 		int* weight) {
-	if (heap->minimum != NULL) {
-		FibonacciHeapElement* child = heap->minimum->child;
-		*vertex = heap->minimum->vertex;
-		*via = heap->minimum->via;
-		*weight = heap->minimum->weight;
+	FibonacciHeapElement* minimum = heap->minimum;
+	if (minimum != NULL) {
+		// store the minimum
+		*vertex = minimum->vertex;
+		*via = minimum->via;
+		*weight = minimum->weight;
 
-		if (heap->minimum->child != NULL) {
-			// make children of minimum to root elements
-			FibonacciHeapElement* startElement = child;
-			FibonacciHeapElement* element = child;
-
-			// remove parent pointer
-			do {
-				element->parent = NULL;
-				element = element->right;
-			} while (element != startElement);
-
-			// add children to root list left to the minimum
-			FibonacciHeapElement* endHeap = heap->minimum->left;
-			FibonacciHeapElement* endChildren = child->left;
-			endChildren->right = heap->minimum;
-			heap->minimum->left = endChildren;
-			endHeap->right = child;
-			child->left = endHeap;
+		// add all childs of minimum to the parent list
+		for (int i = 0; i < minimum->childrens; i++) {
+			FibonacciHeapElement* child = minimum->child;
+			if (child == child->right) {
+				minimum->child = NULL;
+			} else {
+				minimum->child = child->right;
+				child->right->left = child->left;
+				child->left->right = child->right;
+			}
+			child->parent = NULL;
+			child->right = minimum;
+			child->left = minimum->left;
+			minimum->left->right = child;
+			minimum->left = child;
 		}
-		// update right/left
-		heap->minimum->right->left = heap->minimum->left;
-		heap->minimum->left->right = heap->minimum->right;
 
 		// remove minimum
-		heap->positions[heap->minimum->vertex] = NULL;
+		if (minimum == minimum->right) {
+			heap->minimum = NULL;
+		} else {
+			minimum->right->left = minimum->left;
+			minimum->left->right = minimum->right;
+			heap->minimum = minimum->right;
+		}
 		heap->size--;
-		FibonacciHeapElement* toFree = heap->minimum;
-		heap->minimum = heap->minimum->right;
-		free(toFree);
-
-		printf("in pop before consolidate %d\n", *vertex);
-		printFibonacciHeap(heap, heap->minimum);
-
+		heap->positions[minimum->vertex] = NULL;
+		free(minimum);
 		if (heap->size > 0) {
-			// rearrange heap and update minimum
-			consolidateHeap(heap);
+			consolidateFibonacciMinHeap(heap);
 		}
 	}
 }
@@ -1451,49 +1491,6 @@ void swapBinaryHeapElement(BinaryMinHeap* heap, const int position1,
 	BinaryHeapElement swap = heap->elements[position1];
 	heap->elements[position1] = heap->elements[position2];
 	heap->elements[position2] = swap;
-}
-
-/*
- * TODO check
- * update the degree pointers
- */
-FibonacciHeapElement* updateDegreeFibonacciMinHeap(
-		FibonacciHeapElement** degree, FibonacciHeapElement* parent,
-		FibonacciHeapElement* child) {
-	child->right->left = child->left;
-	child->left->right = child->right;
-	if (parent->child == NULL) {
-		// parent had no child
-		child->right = child;
-		child->left = child;
-	} else {
-		// parent had a child
-		child->right = parent->child;
-		child->left = parent->child->left;
-		parent->child->left->right = child;
-		parent->child->left = child;
-	}
-	child->parent = parent;
-	parent->child = child;
-
-	// update degree
-	parent->childrens++;
-	child->marked = 0;
-	degree[parent->childrens - 1] = NULL;
-	if (degree[parent->childrens] == NULL) {
-		// no tree with same degree
-		degree[parent->childrens] = parent;
-		return parent;
-	} else {
-		// tree with same degree, combine
-		if (degree[parent->childrens]->weight > parent->weight) {
-			return updateDegreeFibonacciMinHeap(degree, parent,
-					degree[parent->childrens]);
-		} else {
-			return updateDegreeFibonacciMinHeap(degree,
-					degree[parent->childrens], parent);
-		}
-	}
 }
 
 /*
