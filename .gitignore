@@ -27,11 +27,14 @@
 *.i*86
 *.x86_64
 *.hex
-Debug/MST
-Release/MST
+
+# Eclipse
+Debug/
+Release/
+.cproject
+.project
 
 # Other stuff
 *.csv
 testrun.sh
 auswertung/
-.metadata/
