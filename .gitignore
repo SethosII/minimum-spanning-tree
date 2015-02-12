@@ -38,3 +38,4 @@ Release/
 *.csv
 testrun.sh
 auswertung/
+all_roads/

@@ -9,17 +9,17 @@
 const int EDGE_MEMBERS = 3;
 const int UNSET_CANONICAL_ELEMENT = -1;
 const int NO_EDGE = -1;
-const int MAXIMUM_RANDOM = 20;
+const int MAXIMUM_RANDOM = 100;
 
 typedef struct Handle {
 	int algorithm;
 	int columns;
 	int help;
 	int maze;
-	int new;
-	int parallel;
+	int create;
 	int rows;
 	int verbose;
+	char* graphFile;
 } Handle;
 
 typedef struct ListElement {
@@ -130,7 +130,7 @@ void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
 		const int weight);
 void pushFibonacciMinHeap(FibonacciMinHeap* heap, const int vertex,
 		const int via, const int weight);
-void readMazeFile(WeightedGraph* graph, const char inputFileName[]);
+void readGraphFile(WeightedGraph* graph, const char inputFileName[]);
 void sort(WeightedGraph* graph);
 void swapBinaryHeapElement(BinaryMinHeap* heap, int position1, int position2);
 void unionSet(Set* set, const int parent1, const int parent2);
@@ -172,13 +172,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (rank == 0) {
-		if (handle.new == 1) {
+		if (handle.create == 1) {
 			// create a new maze file
-			createMazeFile(handle.rows, handle.columns, "maze.csv");
+			createMazeFile(handle.rows, handle.columns, handle.graphFile);
 		}
 
 		// read the maze file and store it in the graph
-		readMazeFile(graph, "maze.csv");
+		readGraphFile(graph, handle.graphFile);
 
 		if (handle.verbose == 1) {
 			// print the edges of the read graph
@@ -957,9 +957,9 @@ void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph) {
 	list->elements = graph->vertices;
 	list->lists = (List*) malloc(list->elements * sizeof(List));
 	for (int i = 0; i < list->elements; i++) {
-		list->lists[i].alloced = 1;
+		list->lists[i].alloced = 4;
 		list->lists[i].size = 0;
-		list->lists[i].elements = (ListElement*) malloc(sizeof(ListElement));
+		list->lists[i].elements = (ListElement*) malloc(4 * sizeof(ListElement));
 	}
 }
 
@@ -1214,8 +1214,8 @@ void printWeightedGraph(const WeightedGraph* graph) {
  * process the command line parameters and return a Handle struct with them
  */
 Handle processParameters(int argc, char* argv[]) {
-	Handle handle = { .algorithm = 0, .columns = 3, .maze = 0, .new = 0,
-			.parallel = 0, .rows = 2, .verbose = 0 };
+	Handle handle = { .algorithm = 0, .columns = 3, .help = 0, .maze = 0, .create = 0,
+			.rows = 2, .verbose = 0, .graphFile = "maze.csv" };
 
 	if (argc > 1) {
 		while ((argc > 1) && (argv[1][0] == '-')) {
@@ -1231,6 +1231,13 @@ Handle processParameters(int argc, char* argv[]) {
 			case 'c':
 				// set number of columns
 				handle.columns = atoi(&argv[2][0]);
+				++argv;
+				--argc;
+				break;
+
+			case 'f':
+				// set graph file location
+				handle.graphFile = &argv[2][0];
 				++argv;
 				--argc;
 				break;
@@ -1257,12 +1264,7 @@ Handle processParameters(int argc, char* argv[]) {
 
 			case 'n':
 				// create a new maze file
-				handle.new = 1;
-				break;
-
-			case 'p':
-				// run in parallel
-				handle.parallel = 1;
+				handle.create = 1;
 				break;
 
 			case 'r':
@@ -1361,7 +1363,7 @@ void pushFibonacciMinHeap(FibonacciMinHeap* heap, const int vertex,
 /*
  * read a previously generated maze file and store it in the graph
  */
-void readMazeFile(WeightedGraph* graph, const char inputFileName[]) {
+void readGraphFile(WeightedGraph* graph, const char inputFileName[]) {
 	// open the file
 	FILE* inputFile;
 	const char* inputMode = "r";

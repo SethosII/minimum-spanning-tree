@@ -54,8 +54,9 @@ Parameters
 ----------
 
 ```
--a <int>  choose algorithm: 0 Kruskal (default), 1 Prim, 2 Boruvka
+-a <int>  choose algorithm: 0 Kruskal (default), 1 Prim (Fibonacci), 2 Prim (Binary), 3 Boruvka
 -c <int>  set number of columns (default: 3)
+-f <path> file to store and read graph from (default: maze.csv)
 -h        print this help message
 -m        print the resulting maze to console at the end
 -n        create a new maze file
@@ -72,4 +73,4 @@ Kruskal's algorithm:
 
 Prim's algorithm:
 * store neighbors in adjacency list
-* track vertices in binary heap
+* track vertices in binary or fibonacci heap
