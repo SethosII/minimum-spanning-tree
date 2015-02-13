@@ -213,11 +213,11 @@ int main(int argc, char* argv[]) {
 			printWeightedGraph(mst);
 		}
 
-		int mstWeight = 0;
+		long int weightMST = 0;
 		for (int i = 0; i < mst->edges; i++) {
-			mstWeight += mst->edgeList[i * EDGE_MEMBERS + 2];
+			weightMST += mst->edgeList[i * EDGE_MEMBERS + 2];
 		}
-		printf("MST weight: %d\n", mstWeight);
+		printf("MST weight: %ld\n", weightMST);
 
 		if (handle.maze == 1) {
 			// print the maze to the console
@@ -673,118 +673,76 @@ void mergeSort(int* edgeList, int start, int size) {
 }
 
 /*
- * TODO
- *
  * find a MST of the graph using Boruvka's algorithm
  */
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
-	printf("DUMMY!\n");
-
 	// create needed data structures
 	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
 			NULL };
-	//AdjacencyList* list = &(AdjacencyList ) { .elements = 0, .lists = NULL };
 	newSet(set, graph->vertices);
-	//newAdjacencyList(list, graph);
 
-	/*Edge z = new Edge(0, 0, maxWT);
-	 a = GraphUtilities.edges(G);
-	 b = new Edge[G.V()];
-	 mst = new Edge[G.V()+1];
-	 int N = 1;
-	 int k = 1;
-	 for (int E = graph->edges; E != 0; E = N) {
-	 for (int t = 0; t < graph->vertices; t++) {
-	 b[t] = z;
-	 }
-	 for (int h = 0, N = 0; h < E; h++){
-	 Edge e = a[h];
-	 int i = findSet(set, e.v());
-	 int j = findSet(set, e.w());
-	 if (i == j) {
-	 continue;
-	 }
-	 if (e.wt() < b[i].wt()) {
-	 b[i] = e;
-	 }
-	 if (e.wt() < b[j].wt()) {
-	 b[j] = e;
-	 }
-	 a[N++] = e;
-	 }
-	 for (int h = 0; h < G.V(); h++) {
-	 if (b[h] != z) {
-	 int i = b[h].v();
-	 int j = b[h].w();
-	 if (!uf.find(i, j)) {
-	 unionSet(set, i, j);
-	 mst[k] = b[h];
-	 k++;
-	 }
-	 }
-	 }
-	 }*/
+	int edgesMST = 0;
+	int* closestEdge = (int*) malloc(
+			graph->vertices * EDGE_MEMBERS * sizeof(int));
+	for (int i = 1; i < graph->vertices && edgesMST < graph->vertices - 1; i *=
+			2) {
+		// reset all closestEdge
+		for (int j = 0; j < graph->vertices; j++) {
+			closestEdge[j * EDGE_MEMBERS + 2] = INT_MAX;
+		}
+
+		// update closestEdge
+		for (int j = 0; j < graph->edges; j++) {
+			int* currentEdge = &(graph->edgeList[j * EDGE_MEMBERS]);
+			int canonicalElementFrom = findSet(set, currentEdge[0]);
+			int canonicalElementTo = findSet(set, currentEdge[1]);
+
+			// eventually update closestEdge
+			if (canonicalElementFrom != canonicalElementTo) {
+				int closestEdgeFromNotSet = closestEdge[canonicalElementFrom
+						* EDGE_MEMBERS + 2] == INT_MAX;
+				int weightFromSmaller = currentEdge[2]
+						< closestEdge[canonicalElementFrom * EDGE_MEMBERS + 2];
+				if (closestEdgeFromNotSet || weightFromSmaller) {
+					for (int k = 0; k < EDGE_MEMBERS; k++) {
+						closestEdge[canonicalElementFrom * EDGE_MEMBERS + k] =
+								currentEdge[k];
+					}
+				}
+				int closestEdgeToNotSet = closestEdge[canonicalElementTo
+						* EDGE_MEMBERS + 2] == INT_MAX;
+				int weightToSmaller = currentEdge[2]
+						< closestEdge[canonicalElementTo * EDGE_MEMBERS + 2];
+				if (closestEdgeToNotSet || weightToSmaller) {
+					for (int k = 0; k < EDGE_MEMBERS; k++) {
+						closestEdge[canonicalElementTo * EDGE_MEMBERS + k] =
+								currentEdge[k];
+					}
+				}
+			}
+		}
+
+		// add new edges to MST
+		for (int j = 0; j < graph->vertices; j++) {
+			if (closestEdge[j * EDGE_MEMBERS + 2] != INT_MAX) {
+				int from = closestEdge[j * EDGE_MEMBERS];
+				int to = closestEdge[j * EDGE_MEMBERS + 1];
+
+				// prevent adding the same edge twice
+				if (findSet(set, from) != findSet(set, to)) {
+					for (int k = 0; k < EDGE_MEMBERS; k++) {
+						mst->edgeList[edgesMST * EDGE_MEMBERS + k] =
+								closestEdge[j * EDGE_MEMBERS + k];
+					}
+					edgesMST++;
+					unionSet(set, from, to);
+				}
+			}
+		}
+	}
 
 	// clean up
 	deleteSet(set);
-
-	/*		// foreach tree in forest, find closest edge
-	 // if edge weights are equal, ties are broken in favor of first edge
-	 // in G.Edge()
-	 Edge[] closest = new Edge[G.V()];
-	 for (Edge e : G.Edge())
-	 {
-	 int v = e.either(), w = e.other(v);
-	 int i = uf.find(v), j = uf.find(w);
-	 if (i == j)
-	 continue;   // same tree
-	 if (closest[i] == null || less(e, closest[i]))
-	 closest[i] = e;
-	 if (closest[j] == null || less(e, closest[j]))
-	 closest[j] = e;
-	 }
-
-	 // add newly discovered Edge to MST
-	 for (int i = 0; i < G.V(); i++) {
-	 Edge e = closest[i];
-	 if (e != null) {
-	 int v = e.either(), w = e.other(v);
-	 // don't add the same edge twice
-	 if (!uf.connected(v, w)) {
-	 mst.add(e);
-	 weight += e.weight();
-	 uf.union(v, w);
-	 }
-	 }
-
-	 class GraphMST
-	 { private UF uf;
-	 private Edge[] a, b, mst;
-	 GraphMST(Graph G)
-	 { Edge z = new Edge(0, 0, maxWT);
-	 uf = new UF(G.V());
-	 a = GraphUtilities.edges(G);
-	 b = new Edge[G.V()]; mst = new Edge[G.V()+1];
-	 int N, k = 1;
-	 for (int E = G.E(); E != 0; E = N)
-	 { int h, i, j;
-	 for (int t = 0; t < G.V(); t++) b[t] = z;
-	 for (h = 0, N = 0; h < E; h++)
-	 { Edge e = a[h];
-	 i = uf.find(e.v()); j = uf.find(e.w());
-	 if (i == j) continue;
-	 if (e.wt() < b[i].wt()) b[i] = e;
-	 if (e.wt() < b[j].wt()) b[j] = e;
-	 a[N++] = e;
-	 }
-	 for (h = 0; h < G.V(); h++)
-	 if (b[h] != z)
-	 if (!uf.find(i = b[h].v(), j = b[h].w()))
-	 { uf.unite(i, j); mst[k++] = b[h]; }
-	 }
-	 }
-	 }
-	 */
 }
 
 /*
@@ -805,8 +763,8 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
 	if (rank == 0) {
 		// add edges to the MST
 		int currentEdge = 0;
-		int edgesMST = 0;
-		while (edgesMST < graph->vertices - 1 || currentEdge < graph->edges) {
+		for (int edgesMST = 0;
+				edgesMST < graph->vertices - 1 || currentEdge < graph->edges;) {
 			// check for loops if edge would be inserted
 			int canonicalElementFrom = findSet(set,
 					graph->edgeList[currentEdge * EDGE_MEMBERS]);
@@ -883,8 +841,8 @@ void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst) {
 		}
 
 		// clean up
-		deleteBinaryMinHeap(heap);
 		deleteAdjacencyList(list);
+		deleteBinaryMinHeap(heap);
 	}
 }
 
@@ -913,7 +871,6 @@ void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
 		for (int i = 0; i < graph->vertices; i++) {
 			pushFibonacciMinHeap(heap, i, INT_MAX, INT_MAX);
 		}
-		//printFibonacciHeap(fheap, fheap->minimum);
 
 		int vertex;
 		int via;
@@ -945,8 +902,8 @@ void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
 		}
 
 		// clean up
-		deleteFibonacciMinHeap(heap);
 		deleteAdjacencyList(list);
+		deleteFibonacciMinHeap(heap);
 	}
 }
 
@@ -959,7 +916,8 @@ void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph) {
 	for (int i = 0; i < list->elements; i++) {
 		list->lists[i].alloced = 4;
 		list->lists[i].size = 0;
-		list->lists[i].elements = (ListElement*) malloc(4 * sizeof(ListElement));
+		list->lists[i].elements = (ListElement*) malloc(
+				4 * sizeof(ListElement));
 	}
 }
 
@@ -1214,8 +1172,8 @@ void printWeightedGraph(const WeightedGraph* graph) {
  * process the command line parameters and return a Handle struct with them
  */
 Handle processParameters(int argc, char* argv[]) {
-	Handle handle = { .algorithm = 0, .columns = 3, .help = 0, .maze = 0, .create = 0,
-			.rows = 2, .verbose = 0, .graphFile = "maze.csv" };
+	Handle handle = { .algorithm = 0, .columns = 3, .help = 0, .maze = 0,
+			.create = 0, .rows = 2, .verbose = 0, .graphFile = "maze.csv" };
 
 	if (argc > 1) {
 		while ((argc > 1) && (argv[1][0] == '-')) {

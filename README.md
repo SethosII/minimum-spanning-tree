@@ -18,7 +18,7 @@ A spanning tree can be used for various application:
 Status
 ------
 
-At the moment Kruskal's and Prim's algorithms are implemented.
+At the moment Kruskal's, Prim's and Boruvka's algorithms are implemented. Kruskal can be executed in parallel (sorting is parallelized).
 
 Output
 ------
@@ -74,3 +74,6 @@ Kruskal's algorithm:
 Prim's algorithm:
 * store neighbors in adjacency list
 * track vertices in binary or fibonacci heap
+
+Boruvka's algorithm:
+* track components via union-find data structure with union by rank and path compression
