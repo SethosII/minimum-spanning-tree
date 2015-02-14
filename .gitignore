@@ -34,6 +34,9 @@ Release/
 .cproject
 .project
 
+# Valgrind
+*.out.*
+
 # Other stuff
 *.csv
 testrun.sh
