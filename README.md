@@ -58,7 +58,7 @@ Parameters
 -c <int>  set number of columns (default: 3)
 -f <path> file to store and read graph from (default: maze.csv)
 -h        print this help message
--m        print the resulting maze to console at the end
+-m        print the resulting maze to console at the end (correct number of rows and columns needed!)
 -n        create a new maze file
 -r <int>  set number of rows (default: 2)
 -v        print more information
