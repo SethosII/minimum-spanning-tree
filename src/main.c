@@ -1,10 +1,13 @@
+// C standard header files
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+// other header files
 #include <mpi.h>
 
 const char EMPTY_FIELD = ' ';
@@ -86,7 +89,7 @@ typedef struct FibonacciMinHeap {
 } FibonacciMinHeap;
 
 void consolidateFibonacciMinHeap(FibonacciMinHeap* heap);
-void copyEdge(int* from, int* to);
+void copyEdge(int* to, int* from);
 void createMazeFile(const int rows, const int columns,
 		const char outputFileName[]);
 void cutFibonacciMinHeap(FibonacciMinHeap* heap, FibonacciHeapElement* element);
@@ -104,8 +107,8 @@ void heapifyBinaryMinHeap(BinaryMinHeap* heap, int position);
 void heapifyDownBinaryMinHeap(BinaryMinHeap* heap, int position);
 void insertFibonacciMinHeap(FibonacciMinHeap* heap,
 		FibonacciHeapElement* element);
-void merge(int* edgeList, int start, int size, int pivot);
-void mergeSort(int* edgeList, int start2, int size2);
+void merge(int* edgeList, int start, int end, int pivot);
+void mergeSort(int* edgeList, int start, int end);
 void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst);
 void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst);
 void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst);
@@ -339,10 +342,8 @@ void consolidateFibonacciMinHeap(FibonacciMinHeap* heap) {
 /*
  * copy an edge
  */
-void copyEdge(int* from, int* to) {
-	for (int i = 0; i < EDGE_MEMBERS; i++) {
-		to[i] = from[i];
-	}
+void copyEdge(int* to, int* from) {
+	memcpy(to, from, EDGE_MEMBERS * sizeof(int));
 }
 
 /*
@@ -421,16 +422,6 @@ void cutFibonacciMinHeap(FibonacciMinHeap* heap, FibonacciHeapElement* element) 
 }
 
 /*
- * cleanup adjacency list data
- */
-void deleteAdjacencyList(AdjacencyList* list) {
-	for (int i = 0; i < list->elements; i++) {
-		free(list->lists[i].elements);
-	}
-	free(list->lists);
-}
-
-/*
  * only decrease the weight to a given vertex
  */
 void decreaseBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
@@ -464,10 +455,21 @@ void decreaseFibonacciMinHeap(FibonacciMinHeap* heap, const int vertex,
 }
 
 /*
+ * cleanup adjacency list data
+ */
+void deleteAdjacencyList(AdjacencyList* list) {
+	for (int i = 0; i < list->elements; i++) {
+		free(list->lists[i].elements);
+	}
+	free(list->lists);
+}
+
+/*
  * cleanup binary heap data
  */
 void deleteBinaryMinHeap(BinaryMinHeap* heap) {
 	free(heap->elements);
+	free(heap->positions);
 }
 
 /*
@@ -571,99 +573,91 @@ void insertFibonacciMinHeap(FibonacciMinHeap* heap,
 }
 
 /*
- * merge sorted lists
+ * merge sorted lists, start and end are inclusive
  */
-void merge(int* edgeList, int start, int size, int pivot) {
-//	int length = size - start + 1;
-//	int* working = (int*) malloc(length * EDGE_MEMBERS * sizeof(int));
-//	memset(working, 0, length * EDGE_MEMBERS * sizeof(int));
-//	for (int i = 0; i <= pivot; i++) {
-//		for (int j = 0; j < EDGE_MEMBERS; j++) {
-//			working[i * EDGE_MEMBERS + j] = edgeList[(i + start) * EDGE_MEMBERS
-//					+ j];
-//		}
-//	}
-//	for (int i = pivot + 1; i < length; i++) {
-//		for (int j = 0; j < EDGE_MEMBERS; j++) {
-//			working[(length - i) * EDGE_MEMBERS + j] = edgeList[(i + start)
-//					* EDGE_MEMBERS + j];
-//		}
-//	}
-
-//	for (i = pivot + 1; i > start; i--) {
-//		working[i - 1] = edgeList[i - 1];
-//	}
-//	for (j = pivot; j < size; j++) {
-//		working[size + pivot - j] = edgeList[j + 1];
-//	}
-
-//	int i = 0;
-//	int j = size;
-//	for (int k = start; k <= size; k++) {
-//		if (working[j * EDGE_MEMBERS + 2] < working[i * EDGE_MEMBERS + 2]) {
-//			for (int l = 0; l < EDGE_MEMBERS; l++) {
-//				edgeList[k * EDGE_MEMBERS + l] = working[i * EDGE_MEMBERS + l];
-//			}
-//			j--;
-//		} else {
-//			for (int l = 0; l < EDGE_MEMBERS; l++) {
-//				edgeList[k * EDGE_MEMBERS + l] = working[i * EDGE_MEMBERS + l];
-//			}
-//			i++;
-//		}
-//	}
-//	free(working);
-
-	int length = size - start + 1;
-	// make a temporary copy of the list for merging
+void merge(int* edgeList, int start, int end, int pivot) {
+	int length = end - start + 1;
 	int* working = (int*) malloc(length * EDGE_MEMBERS * sizeof(int));
-	for (int i = 0; i < length; i++) {
-		copyEdge(&(edgeList[(i + start) * EDGE_MEMBERS]),
-				&(working[i * EDGE_MEMBERS]));
+
+	// copy first part
+	memcpy(working, &edgeList[start * EDGE_MEMBERS],
+			(pivot - start + 1) * EDGE_MEMBERS * sizeof(int));
+
+	// copy second part reverse to simpify merge
+	int workingEnd = end + pivot - start + 1;
+	for (int i = pivot + 1; i <= end; i++) {
+		copyEdge(&working[(workingEnd - i) * EDGE_MEMBERS],
+				&edgeList[i * EDGE_MEMBERS]);
 	}
 
-	// merge the two parts together
-	int merge1 = 0;
-	int merge2 = pivot - start + 1;
-	for (int i = 0; i < length; i++) {
-		if (merge2 <= size - start) {
-			if (merge1 <= pivot - start) {
-				if (working[merge1 * EDGE_MEMBERS + 2]
-						> working[merge2 * EDGE_MEMBERS + 2]) {
-					copyEdge(&(working[merge2 * EDGE_MEMBERS]),
-							&(edgeList[(i + start) * EDGE_MEMBERS]));
-					merge2++;
-				} else {
-					copyEdge(&(working[merge1 * EDGE_MEMBERS]),
-							&(edgeList[(i + start) * EDGE_MEMBERS]));
-					merge1++;
-				}
-			} else {
-				copyEdge(&(working[merge2 * EDGE_MEMBERS]),
-						&(edgeList[(i + start) * EDGE_MEMBERS]));
-				merge2++;
-			}
+	int left = 0;
+	int right = end - start;
+	for (int k = start; k <= end; k++) {
+		if (working[right * EDGE_MEMBERS + 2]
+				< working[left * EDGE_MEMBERS + 2]) {
+			copyEdge(&edgeList[k * EDGE_MEMBERS],
+					&working[right * EDGE_MEMBERS]);
+			right--;
 		} else {
-			copyEdge(&(working[merge1 * EDGE_MEMBERS]),
-					&(edgeList[(i + start) * EDGE_MEMBERS]));
-			merge1++;
+			copyEdge(&edgeList[k * EDGE_MEMBERS],
+					&working[left * EDGE_MEMBERS]);
+			left++;
 		}
 	}
 
+	// clean up
 	free(working);
+
+// old merge
+//	int length = end - start + 1;
+//	// make a temporary copy of the list for merging
+//	int* working = (int*) malloc(length * EDGE_MEMBERS * sizeof(int));
+//	memcpy(working, &edgeList[start * EDGE_MEMBERS],
+//			length * EDGE_MEMBERS * sizeof(int));
+//
+//	// merge the two parts together
+//	int merge1 = 0;
+//	int merge2 = pivot - start + 1;
+//	for (int i = 0; i < length; i++) {
+//		if (merge2 <= end - start) {
+//			if (merge1 <= pivot - start) {
+//				if (working[merge1 * EDGE_MEMBERS + 2]
+//						> working[merge2 * EDGE_MEMBERS + 2]) {
+//					copyEdge(&edgeList[(i + start) * EDGE_MEMBERS],
+//							&working[merge2 * EDGE_MEMBERS]);
+//					merge2++;
+//				} else {
+//					copyEdge(&edgeList[(i + start) * EDGE_MEMBERS],
+//							&working[merge1 * EDGE_MEMBERS]);
+//					merge1++;
+//				}
+//			} else {
+//				copyEdge(&edgeList[(i + start) * EDGE_MEMBERS],
+//						&working[merge2 * EDGE_MEMBERS]);
+//				merge2++;
+//			}
+//		} else {
+//			copyEdge(&edgeList[(i + start) * EDGE_MEMBERS],
+//					&working[merge1 * EDGE_MEMBERS]);
+//			merge1++;
+//		}
+//	}
+//
+//	// clean up
+//	free(working);
 }
 
 /*
- * sort the edge list using merge sort
+ * sort the edge list using merge sort, start and end are inclusive
  */
-void mergeSort(int* edgeList, int start, int size) {
-	if (start != size) {
+void mergeSort(int* edgeList, int start, int end) {
+	if (start != end) {
 		// recursively divide the list in two parts and sort them
-		int pivot = (start + size) / 2;
+		int pivot = (start + end) / 2;
 		mergeSort(edgeList, start, pivot);
-		mergeSort(edgeList, pivot + 1, size);
+		mergeSort(edgeList, pivot + 1, end);
 
-		merge(edgeList, start, size, pivot);
+		merge(edgeList, start, end, pivot);
 	}
 }
 
@@ -692,7 +686,7 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 
 			// find closestEdge
 			for (int j = 0; j < graph->edges; j++) {
-				int* currentEdge = &(graph->edgeList[j * EDGE_MEMBERS]);
+				int* currentEdge = &graph->edgeList[j * EDGE_MEMBERS];
 				int canonicalElements[2] = { findSet(set, currentEdge[0]),
 						findSet(set, currentEdge[1]) };
 
@@ -706,9 +700,9 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 								< closestEdge[canonicalElements[k]
 										* EDGE_MEMBERS + 2];
 						if (closestEdgeNotSet || weightSmaller) {
-							copyEdge(currentEdge,
-									&(closestEdge[canonicalElements[k]
-											* EDGE_MEMBERS]));
+							copyEdge(
+									&closestEdge[canonicalElements[k]
+											* EDGE_MEMBERS], currentEdge);
 						}
 					}
 				}
@@ -722,8 +716,8 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 
 					// prevent adding the same edge twice
 					if (findSet(set, from) != findSet(set, to)) {
-						copyEdge(&(closestEdge[j * EDGE_MEMBERS]),
-								&(mst->edgeList[edgesMST * EDGE_MEMBERS]));
+						copyEdge(&mst->edgeList[edgesMST * EDGE_MEMBERS],
+								&closestEdge[j * EDGE_MEMBERS]);
 						edgesMST++;
 						unionSet(set, from, to);
 					}
@@ -733,6 +727,7 @@ void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
 
 		// clean up
 		deleteSet(set);
+		free(closestEdge);
 	}
 }
 
@@ -763,8 +758,8 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
 					graph->edgeList[currentEdge * EDGE_MEMBERS + 1]);
 			if (canonicalElementFrom != canonicalElementTo) {
 				// add edge to MST
-				copyEdge(&(graph->edgeList[currentEdge * EDGE_MEMBERS]),
-						&(mst->edgeList[edgesMST * EDGE_MEMBERS]));
+				copyEdge(&mst->edgeList[edgesMST * EDGE_MEMBERS],
+						&graph->edgeList[currentEdge * EDGE_MEMBERS]);
 				unionSet(set, canonicalElementFrom, canonicalElementTo);
 				edgesMST++;
 			}
@@ -953,8 +948,7 @@ void newSet(Set* set, const int elements) {
 	set->elements = elements;
 	set->canonicalElements = (int*) malloc(elements * sizeof(int));
 	memset(set->canonicalElements, UNSET_ELEMENT, elements * sizeof(int));
-	set->rank = (int*) malloc(elements * sizeof(int));
-	memset(set->rank, 0, elements * sizeof(int));
+	set->rank = (int*) calloc(elements, sizeof(int));
 }
 
 /*
@@ -963,8 +957,7 @@ void newSet(Set* set, const int elements) {
 void newWeightedGraph(WeightedGraph* graph, const int vertices, const int edges) {
 	graph->edges = edges;
 	graph->vertices = vertices;
-	graph->edgeList = (int*) malloc(edges * EDGE_MEMBERS * sizeof(int));
-	memset(graph->edgeList, 0, edges * EDGE_MEMBERS * sizeof(int));
+	graph->edgeList = (int*) calloc(edges * EDGE_MEMBERS, sizeof(int));
 }
 
 /*
@@ -1244,7 +1237,7 @@ Handle processParameters(int argc, char* argv[]) {
  * add edge to adjacency list
  */
 void pushAdjacencyList(AdjacencyList* list, int from, int to, int weight) {
-	List* lists[2] = { &(list->lists[from]), &(list->lists[to]) };
+	List* lists[2] = { &list->lists[from], &list->lists[to] };
 	for (int i = 0; i < 2; i++) {
 		if (lists[i]->size == lists[i]->alloced) {
 			lists[i]->elements = (ListElement*) realloc(lists[i]->elements,
