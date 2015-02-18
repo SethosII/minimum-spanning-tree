@@ -41,4 +41,4 @@ Release/
 *.csv
 testrun.sh
 auswertung/
-all_roads/
+all_graphs/
