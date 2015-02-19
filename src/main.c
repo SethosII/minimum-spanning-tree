@@ -109,10 +109,10 @@ void insertFibonacciMinHeap(FibonacciMinHeap* heap,
 		FibonacciHeapElement* element);
 void merge(int* edgeList, const int start, const int end, const int pivot);
 void mergeSort(int* edgeList, const int start, const int end);
-void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst);
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst);
-void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst);
-void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst);
+void mstBoruvka(const WeightedGraph* graph, WeightedGraph* mst);
+void mstKruskal(WeightedGraph* graph, WeightedGraph* mst);
+void mstPrimBinary(const WeightedGraph* graph, WeightedGraph* mst);
+void mstPrimFibonacci(const WeightedGraph* graph, WeightedGraph* mst);
 void newAdjacencyList(AdjacencyList* list, const WeightedGraph* graph);
 void newBinaryMinHeap(BinaryMinHeap* heap);
 void newFibonacciHeapElement(FibonacciHeapElement* element, const int vertex,
@@ -140,9 +140,10 @@ void pushBinaryMinHeap(BinaryMinHeap* heap, const int vertex, const int via,
 void pushFibonacciMinHeap(FibonacciMinHeap* heap, const int vertex,
 		const int via, const int weight);
 void readGraphFile(WeightedGraph* graph, const char inputFileName[]);
+void scatterEdgeList(int* edgeList, int* edgeListPart, const int elements,
+		int* elementsPart);
 void sort(WeightedGraph* graph);
-void swapBinaryHeapElement(const BinaryMinHeap* heap, int position1,
-		int position2);
+void swapBinaryHeapElement(BinaryMinHeap* heap, int position1, int position2);
 void unionSet(Set* set, const int parent1, const int parent2);
 
 /*
@@ -678,77 +679,143 @@ void mergeSort(int* edgeList, const int start, const int end) {
 /*
  * find a MST of the graph using Boruvka's algorithm
  */
-void mstBoruvka(const WeightedGraph* graph, const WeightedGraph* mst) {
+void mstBoruvka(const WeightedGraph* graph, WeightedGraph* mst) {
 	int rank;
+	int size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Status status;
 
+	bool parallel = size != 1;
+
+	// send number of edges and vertices
+	int edges;
+	int vertices;
 	if (rank == 0) {
-		// create needed data structures
-		Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
-				NULL };
-		newSet(set, graph->vertices);
+		edges = graph->edges;
+		vertices = graph->vertices;
+		MPI_Bcast(&edges, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&vertices, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	} else {
+		MPI_Bcast(&edges, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&vertices, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	}
 
-		int edgesMST = 0;
-		int* closestEdge = (int*) malloc(
-				graph->vertices * EDGE_MEMBERS * sizeof(int));
-		for (int i = 1; i < graph->vertices && edgesMST < graph->vertices - 1;
-				i *= 2) {
-			// reset all closestEdge
-			for (int j = 0; j < graph->vertices; j++) {
-				closestEdge[j * EDGE_MEMBERS + 2] = INT_MAX;
-			}
+	// scatter the edges to search in them
+	int edgesPart = (edges + size - 1) / size;
+	int* edgeListPart = (int*) malloc(edgesPart * EDGE_MEMBERS * sizeof(int));
+	if (parallel) {
+		scatterEdgeList(graph->edgeList, edgeListPart, edges, &edgesPart);
+	} else {
+		edgeListPart = graph->edgeList;
+	}
 
-			// find closestEdge
-			for (int j = 0; j < graph->edges; j++) {
-				int* currentEdge = &graph->edgeList[j * EDGE_MEMBERS];
-				int canonicalElements[2] = { findSet(set, currentEdge[0]),
-						findSet(set, currentEdge[1]) };
+	// create needed data structures
+	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
+			NULL };
+	newSet(set, vertices);
 
-				// eventually update closestEdge
-				if (canonicalElements[0] != canonicalElements[1]) {
-					for (int k = 0; k < 2; k++) {
-						bool closestEdgeNotSet =
-								closestEdge[canonicalElements[k] * EDGE_MEMBERS
-										+ 2] == INT_MAX;
-						bool weightSmaller = currentEdge[2]
-								< closestEdge[canonicalElements[k]
-										* EDGE_MEMBERS + 2];
-						if (closestEdgeNotSet || weightSmaller) {
-							copyEdge(
-									&closestEdge[canonicalElements[k]
-											* EDGE_MEMBERS], currentEdge);
-						}
-					}
-				}
-			}
+	int edgesMST = 0;
+	int* closestEdge = (int*) malloc(vertices * EDGE_MEMBERS * sizeof(int));
+	int* closestEdgeRecieved;
+	if (parallel) {
+		closestEdgeRecieved = (int*) malloc(
+				vertices * EDGE_MEMBERS * sizeof(int));
+	}
 
-			// add new edges to MST
-			for (int j = 0; j < graph->vertices; j++) {
-				if (closestEdge[j * EDGE_MEMBERS + 2] != INT_MAX) {
-					int from = closestEdge[j * EDGE_MEMBERS];
-					int to = closestEdge[j * EDGE_MEMBERS + 1];
+	for (int i = 1; i < vertices && edgesMST < vertices - 1; i *= 2) {
+		// reset all closestEdge
+		for (int j = 0; j < vertices; j++) {
+			closestEdge[j * EDGE_MEMBERS + 2] = INT_MAX;
+		}
 
-					// prevent adding the same edge twice
-					if (findSet(set, from) != findSet(set, to)) {
-						copyEdge(&mst->edgeList[edgesMST * EDGE_MEMBERS],
-								&closestEdge[j * EDGE_MEMBERS]);
-						edgesMST++;
-						unionSet(set, from, to);
+		// find closestEdge
+		for (int j = 0; j < edgesPart; j++) {
+			int* currentEdge = &edgeListPart[j * EDGE_MEMBERS];
+			int canonicalElements[2] = { findSet(set, currentEdge[0]), findSet(
+					set, currentEdge[1]) };
+
+			// eventually update closestEdge
+			if (canonicalElements[0] != canonicalElements[1]) {
+				for (int k = 0; k < 2; k++) {
+					bool closestEdgeNotSet = closestEdge[canonicalElements[k]
+							* EDGE_MEMBERS + 2] == INT_MAX;
+					bool weightSmaller = currentEdge[2]
+							< closestEdge[canonicalElements[k] * EDGE_MEMBERS
+									+ 2];
+					if (closestEdgeNotSet || weightSmaller) {
+						copyEdge(
+								&closestEdge[canonicalElements[k] * EDGE_MEMBERS],
+								currentEdge);
 					}
 				}
 			}
 		}
 
-		// clean up
-		deleteSet(set);
-		free(closestEdge);
+		if (parallel) {
+			int from;
+			int to;
+			for (int step = 1; step < size; step *= 2) {
+				if (rank % (2 * step) == 0) {
+					from = rank + step;
+					if (from < size) {
+						MPI_Recv(closestEdgeRecieved, vertices * EDGE_MEMBERS,
+						MPI_INT, from, 0, MPI_COMM_WORLD, &status);
+
+						// combine all closestEdge parts
+						for (int i = 0; i < vertices; i++) {
+							int currentVertex = i * EDGE_MEMBERS;
+							if (closestEdgeRecieved[currentVertex + 2]
+									< closestEdge[currentVertex + 2]) {
+								copyEdge(&closestEdge[currentVertex],
+										&closestEdgeRecieved[currentVertex]);
+							}
+						}
+					}
+				} else if (rank % step == 0) {
+					to = rank - step;
+					MPI_Send(closestEdge, vertices * EDGE_MEMBERS, MPI_INT, to,
+							0,
+							MPI_COMM_WORLD);
+				}
+			}
+			// publish all closestEdge parts
+			MPI_Bcast(closestEdge, vertices * EDGE_MEMBERS, MPI_INT, 0,
+			MPI_COMM_WORLD);
+		}
+
+		// add new edges to MST
+		for (int j = 0; j < vertices; j++) {
+			if (closestEdge[j * EDGE_MEMBERS + 2] != INT_MAX) {
+				int from = closestEdge[j * EDGE_MEMBERS];
+				int to = closestEdge[j * EDGE_MEMBERS + 1];
+
+				// prevent adding the same edge twice
+				if (findSet(set, from) != findSet(set, to)) {
+					if (rank == 0) {
+						copyEdge(&mst->edgeList[edgesMST * EDGE_MEMBERS],
+								&closestEdge[j * EDGE_MEMBERS]);
+					}
+					edgesMST++;
+					unionSet(set, from, to);
+				}
+			}
+		}
+	}
+
+	// clean up
+	deleteSet(set);
+	free(closestEdge);
+	if (parallel) {
+		free(closestEdgeRecieved);
+		free(edgeListPart);
 	}
 }
 
 /*
  * find a MST of the graph using Kruskal's algorithm
  */
-void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
+void mstKruskal(WeightedGraph* graph, WeightedGraph* mst) {
 	// create needed data structures
 	Set* set = &(Set ) { .elements = 0, .canonicalElements = NULL, .rank =
 			NULL };
@@ -788,7 +855,7 @@ void mstKruskal(WeightedGraph* graph, const WeightedGraph* mst) {
 /*
  * find a MST of the graph using Prim's algorithm with a binary heap
  */
-void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst) {
+void mstPrimBinary(const WeightedGraph* graph, WeightedGraph* mst) {
 	int rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -847,7 +914,7 @@ void mstPrimBinary(const WeightedGraph* graph, const WeightedGraph* mst) {
 /*
  * find a MST of the graph using Prim's algorithm with a fibonacci heap
  */
-void mstPrimFibonacci(const WeightedGraph* graph, const WeightedGraph* mst) {
+void mstPrimFibonacci(const WeightedGraph* graph, WeightedGraph* mst) {
 	int rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -1339,6 +1406,34 @@ void readGraphFile(WeightedGraph* graph, const char inputFileName[]) {
 }
 
 /*
+ * scatter the edge list of a graph
+ */
+void scatterEdgeList(int* edgeList, int* edgeListPart, const int elements,
+		int* elementsPart) {
+	int rank;
+	int size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	MPI_Scatter(edgeList, *elementsPart * EDGE_MEMBERS, MPI_INT, edgeListPart,
+			*elementsPart * EDGE_MEMBERS,
+			MPI_INT, 0, MPI_COMM_WORLD);
+
+	if (rank == size - 1 && elements % *elementsPart != 0) {
+		// number of elements and processes isn't divisible without remainder
+		*elementsPart = elements % *elementsPart;
+	}
+
+	if (elements / 2 + 1 < size && elements != size) {
+		if (rank == 0) {
+			fprintf(stderr, "Unsupported size/process combination, exiting!\n");
+		}
+		MPI_Finalize();
+		exit(EXIT_FAILURE);
+	}
+}
+
+/*
  * sort the edges of the graph in parallel with mergesort in parallel
  */
 void sort(WeightedGraph* graph) {
@@ -1347,6 +1442,8 @@ void sort(WeightedGraph* graph) {
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Status status;
+
+	bool parallel = size != 1;
 
 	// send number of elements
 	int elements;
@@ -1361,67 +1458,61 @@ void sort(WeightedGraph* graph) {
 	int elementsPart = (elements + size - 1) / size;
 	int* edgeListPart = (int*) malloc(
 			elementsPart * EDGE_MEMBERS * sizeof(int));
-	MPI_Scatter(graph->edgeList, elementsPart * EDGE_MEMBERS, MPI_INT,
-			edgeListPart, elementsPart * EDGE_MEMBERS,
-			MPI_INT, 0, MPI_COMM_WORLD);
-
-	if (rank == size - 1 && elements % elementsPart != 0) {
-		// number of elements and processes isn't divisible without remainder
-		elementsPart = elements % elementsPart;
-	}
-
-	if (elements / 2 + 1 < size && elements != size) {
-		if (rank == 0) {
-			fprintf(stderr, "Unsupported size/process combination, exiting!\n");
-		}
-		MPI_Finalize();
-		exit(EXIT_FAILURE);
+	if (parallel) {
+		scatterEdgeList(graph->edgeList, edgeListPart, elements, &elementsPart);
+	} else {
+		edgeListPart = graph->edgeList;
 	}
 
 	// sort the part
 	mergeSort(edgeListPart, 0, elementsPart - 1);
 
-	// merge all parts
-	int from;
-	int to;
-	int elementsRecieved;
-	for (int step = 1; step < size; step *= 2) {
-		if (rank % (2 * step) == 0) {
-			from = rank + step;
-			if (from < size) {
-				MPI_Recv(&elementsRecieved, 1, MPI_INT, from, 0,
-				MPI_COMM_WORLD, &status);
-				edgeListPart = realloc(edgeListPart,
-						(elementsPart + elementsRecieved) * EDGE_MEMBERS
-								* sizeof(int));
-				MPI_Recv(&edgeListPart[elementsPart * EDGE_MEMBERS],
-						elementsRecieved * EDGE_MEMBERS,
-						MPI_INT, from, 0, MPI_COMM_WORLD, &status);
-				merge(edgeListPart, 0, elementsPart + elementsRecieved - 1,
-						elementsPart - 1);
-				elementsPart += elementsRecieved;
+	if (parallel) {
+		// merge all parts
+		int from;
+		int to;
+		int elementsRecieved;
+		for (int step = 1; step < size; step *= 2) {
+			if (rank % (2 * step) == 0) {
+				from = rank + step;
+				if (from < size) {
+					MPI_Recv(&elementsRecieved, 1, MPI_INT, from, 0,
+					MPI_COMM_WORLD, &status);
+					edgeListPart = realloc(edgeListPart,
+							(elementsPart + elementsRecieved) * EDGE_MEMBERS
+									* sizeof(int));
+					MPI_Recv(&edgeListPart[elementsPart * EDGE_MEMBERS],
+							elementsRecieved * EDGE_MEMBERS,
+							MPI_INT, from, 0, MPI_COMM_WORLD, &status);
+					merge(edgeListPart, 0, elementsPart + elementsRecieved - 1,
+							elementsPart - 1);
+					elementsPart += elementsRecieved;
+				}
+			} else if (rank % step == 0) {
+				to = rank - step;
+				MPI_Send(&elementsPart, 1, MPI_INT, to, 0, MPI_COMM_WORLD);
+				MPI_Send(edgeListPart, elementsPart * EDGE_MEMBERS, MPI_INT, to,
+						0,
+						MPI_COMM_WORLD);
 			}
-		} else if (rank % (step) == 0) {
-			to = rank - step;
-			MPI_Send(&elementsPart, 1, MPI_INT, to, 0, MPI_COMM_WORLD);
-			MPI_Send(edgeListPart, elementsPart * EDGE_MEMBERS, MPI_INT, to, 0,
-			MPI_COMM_WORLD);
 		}
-	}
 
-	// edgeListPart is the new edgeList of the graph, cleanup other memory
-	if (rank == 0) {
-		free(graph->edgeList);
-		graph->edgeList = edgeListPart;
+		// edgeListPart is the new edgeList of the graph, cleanup other memory
+		if (rank == 0) {
+			free(graph->edgeList);
+			graph->edgeList = edgeListPart;
+		} else {
+			free(edgeListPart);
+		}
 	} else {
-		free(edgeListPart);
+		graph->edgeList = edgeListPart;
 	}
 }
 
 /*
  * helper function to swap binary heap elements
  */
-void swapBinaryHeapElement(const BinaryMinHeap* heap, const int position1,
+void swapBinaryHeapElement(BinaryMinHeap* heap, const int position1,
 		const int position2) {
 	heap->positions[heap->elements[position1].vertex] = position2;
 	heap->positions[heap->elements[position2].vertex] = position1;
