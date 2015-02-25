@@ -34,7 +34,11 @@ Release/
 .cproject
 .project
 
+# Valgrind
+*.out.*
+
 # Other stuff
 *.csv
 testrun.sh
 auswertung/
+all_graphs/
