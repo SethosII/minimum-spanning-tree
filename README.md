@@ -1,20 +1,17 @@
 minimum-spanning-tree
 =====================
 
-General
--------
-
 This project implements the algorithms of Kruskal, Prim and Boruvka for creating a minimum spanning tree (MST) of a weighted, undirected graph in C with parallelization via MPI. It was developed for the module "Algorithm Engineering" at the HTWK Leipzig.
 
 Applications of MSTs
 --------------------
 
 A spanning tree can be used for various applications:
-* Spanning Tree Protocol (STP) in bridged Ethernet networks to ensure loop free connections
-* minimum cost networks (roads, electricity, telephone, ...)
-* approximation of the traveling salesman problem (TSP)
-* generation of mazes
-* ...
+- Spanning Tree Protocol (STP) in bridged Ethernet networks to ensure loop free connections
+- minimum cost networks (roads, electricity, telephone, ...)
+- approximation of the traveling salesman problem (TSP)
+- generation of mazes
+- ...
 
 Status
 ------
@@ -24,7 +21,7 @@ The algorithms of Kruskal, Prim and Boruvka are implemented. Kruskal's and Boruv
 Output
 ------
 
-The maze generation was chosen, to test the program. The program can generate a 2D grid graph with random edge weights. The resulting maze can be printed to the console by passing the argument `-m` to the program. A `+` represents a vertex and `-`,`|` represent an edge between two vertices.
+The maze generation was chosen, to test the program. The program can generate a 2D square grid graph with random edge weights. The resulting maze can be printed to the console by passing the argument `-m` to the program. A `+` represents a vertex and `-`, `|` represent an edge between two vertices.
 
 Example output (`mpirun -np 1 ./MST -c 12 -r 8 -a 0 -n -f mazeGraph.csv -m`):
 ```
@@ -68,15 +65,16 @@ Implementation overview
 -----------------------
 
 Kruskal's algorithm:
-* sorting edges via parallelized merge sort
-* track components via union-find data structure with union by rank and path compression
+- sorting edges via parallelized merge sort
+- track components via union-find data structure with union by rank and path compression
 
 Prim's algorithm:
-* store neighbors in adjacency list
-* track vertices in binary or fibonacci heap
+- store neighbors in adjacency list
+- track vertices in binary or fibonacci heap
 
 Boruvka's algorithm:
-* track components via union-find data structure with union by rank and path compression
+- track components via union-find data structure with union by rank and path compression
+- parallelized search for minimum outgoing edge
 
 Results
 -------
@@ -90,3 +88,10 @@ Kruskal's algorithm could be shown to be the second choice for sparse graphs. Bu
 Prim's algorithm with a fibonacci heap was only able to outperform the binary heap slightly for very large graphs. In all other cases the implementation with the binary heap was faster. It also uses the most amount of memory and was the most complicated to implement. Therefore is the use of a fibonacci heap discouraged. Prim's algorithm with the binary heap was on pair with Kruskal's algorithm for small graphs and uses more memory.
 
 In conclusion the use of Boruvka's algorithm is recommended to find the MST of a graph.
+
+Maze visualization
+------------------
+
+The MST of a graph can be interpreted as a maze. With the Java program created from [src/Maze2PNG.java](src/Maze2PNG.java) you can visualize a square grid graph created with he `-m` option. Just write the output in a file: `mpirun -np 1 ./MST -c 12 -r 8 -a 0 -n -f mazeGraph.csv -m > maze.txt` and pass it to the program as the first argument. The second argument specifies the name of the PNG file to safe the visualization: `java Maze2PNG maze.txt maze.png`. Each `+`, `-` and `|` are represented as white pixels, spaces are black pixels. There is also a one pixel wide black padding around the maze. The image generated out of the example above can be seen in the following screenshot.
+
+![maze.png](maze.png)
