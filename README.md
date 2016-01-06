@@ -1,7 +1,7 @@
 minimum-spanning-tree
 =====================
 
-This project implements the algorithms of Kruskal, Prim and Boruvka for creating a minimum spanning tree (MST) of a weighted, undirected graph in C with parallelization via MPI. It was developed for the module "Algorithm Engineering" at the HTWK Leipzig.
+This project implements the algorithms of Kruskal, Prim and Boruvka for creating a minimum spanning tree (MST) of a weighted, undirected graph in C with parallelization via MPI. It was developed for the module "Algorithm Engineering" at the HTWK Leipzig. The work was also submitted and accepted as a paper for [SKILL 2015](http://skill.informatik.uni-leipzig.de/blog/historie/skill2015/) which was part of [INFORMATIK 2015](http://www.informatik2015.de/). A [copy](paper/paper-german.pdf) and the corresponding [BibTeX file](paper/Jahne15.bib) can be found in the directory `paper`. I will add a translation into English somewhere in the future.
 
 Applications of MSTs
 --------------------
